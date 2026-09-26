@@ -49,4 +49,24 @@ $ADB -s 127.0.0.1:5555 shell monkey -p com.agentmobile.bridge 1
 
 ## 踩坑记录
 
-（构建过程中补充）
+1. **Gradle wrapper 下载超时**：首次 `android build` 卡在 gradle-wrapper 从
+   `services.gradle.org` 下载 `gradle-8.14.3-bin.zip`（read timeout）。
+   解法：`src-tauri/gen/android/gradle/wrapper/gradle-wrapper.properties` 的
+   `distributionUrl` 改为腾讯镜像
+   `https://mirrors.cloud.tencent.com/gradle/gradle-8.14.3-bin.zip`，并删除半截缓存
+   `rm -rf ~/.gradle/wrapper/dists/gradle-8.14.3-bin`（残留 partial 会让 wrapper 卡死重下）。
+   注意 `gen/` 由 `cargo tauri android init` 生成，重跑 init 后需重新修改。
+2. **首次 `android init` 超时中断**：init 会顺带安装 armv7/i686/x86_64 三个额外
+   Rust target，下载较慢；被 300s 超时打断后重跑即可（幂等续装）。
+
+## 验证记录（2026-09-26）
+
+- `cargo tauri android build --debug --target aarch64` 成功，APK 115MB：
+  `app/src-tauri/gen/android/app/build/outputs/apk/universal/debug/app-universal-debug.apk`
+- MuMu（127.0.0.1:5555）`install -r` 成功，`monkey -p com.agentmobile.bridge 1` 启动，
+  logcat 显示 `Displayed com.agentmobile.bridge/.MainActivity: +412ms`，WebView 95 加载正常，
+  全程无 FATAL；进程在三页切换后保持存活
+- 三页截图证据（/tmp）：`app-page-connect.png`（连接页）、`app-page-caps.png`（能力自检页）、
+  `app-page-logs.png`（日志页，首条为 tap 自测「待接线」交互产生）
+- workspace 隔离验证：根仓库 `cargo metadata` 仅含 `agent-mobile-cli`；
+  根仓库 `cargo clippy --all-targets -- -D warnings` 与 `cargo test`（54 passed）不受 app/ 影响

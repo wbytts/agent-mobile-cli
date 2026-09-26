@@ -7,9 +7,9 @@
 
 ## 2. 桥接协议
 
-- [ ] 2.1 在 daemon 侧实现 WS 协议（hello 注册/heartbeat/command 分发/result 回传），验证模拟 WS 客户端握手注册后设备出现在枚举中 <!-- comet-task:02e6b5e2-7068-4e61-a243-996aae31e593 -->
-- [ ] 2.2 编写协议消息 schema 文档（随代码同步维护），验证文档中每种消息与实现字段一致 <!-- comet-task:ce233ce2-7f38-4e65-b248-b6edfe45d979 -->
-- [ ] 2.3 实现 daemon 侧配对认证（启动生成一次性配对码、验证配对并下发/校验长期 token、`agent-mobile-cli pair` 显示配对码/候选 IP/终端配对二维码与 `--reset` 重置），验证错误配对码被拒、配对后 token 重连成功、重置后旧 token 失效 <!-- comet-task:7cb6921e-aba4-4f43-b531-469b150c5e6b -->
+- [x] 2.1 在 daemon 侧实现 WS 协议（hello 注册/heartbeat/command 分发/result 回传），验证模拟 WS 客户端握手注册后设备出现在枚举中 <!-- comet-task:02e6b5e2-7068-4e61-a243-996aae31e593 -->
+- [x] 2.2 编写协议消息 schema 文档（随代码同步维护），验证文档中每种消息与实现字段一致 <!-- comet-task:ce233ce2-7f38-4e65-b248-b6edfe45d979 -->
+- [x] 2.3 实现 daemon 侧配对认证（启动生成一次性配对码、验证配对并下发/校验长期 token、`agent-mobile-cli pair` 显示配对码/候选 IP/终端配对二维码与 `--reset` 重置），验证错误配对码被拒、配对后 token 重连成功、重置后旧 token 失效 <!-- comet-task:7cb6921e-aba4-4f43-b531-469b150c5e6b -->
 
 ## 3. Kotlin 原生能力
 
