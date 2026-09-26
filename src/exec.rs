@@ -143,9 +143,12 @@ impl DaemonState {
                 Ok(json!({ "device": dev.id, "logcat": out }))
             }
             Command::Shell { cmd, device } => {
-                if cmd.iter().any(|a| a == "--device") {
+                if cmd
+                    .iter()
+                    .any(|a| a == "--device" || a.starts_with("--device="))
+                {
                     return Err(ErrorBody::usage(
-                        "shell 的 --device 等选项需写在命令之前：agent-mobile-cli shell --device <serial> <cmd...>",
+                        "shell 的 --device 等选项需写在命令之前：agent-mobile-cli shell --device <serial> <cmd...>；如需向设备命令传递字面 --device 参数，请用 sh -c '...' 包裹",
                     ));
                 }
                 let dev = self.resolve(device.as_deref())?;
@@ -246,5 +249,36 @@ mod tests {
         let out = state.execute(&Command::DaemonStatus, Path::new("/tmp"));
         assert!(!out.ok);
         assert_eq!(out.error.unwrap().code, crate::output::ErrorCode::Usage);
+    }
+
+    #[test]
+    fn shell_rejects_trailing_device_flag() {
+        // 防护在 backend 解析前触发，无需设备/adb
+        let state = DaemonState::new(Config::default());
+        for cmd in [
+            vec!["getprop".to_owned(), "--device".to_owned(), "x".to_owned()],
+            vec!["getprop".to_owned(), "--device=emu64a".to_owned()],
+        ] {
+            let out = state.execute(&Command::Shell { cmd, device: None }, Path::new("/tmp"));
+            assert!(!out.ok);
+            let err = out.error.unwrap();
+            assert_eq!(err.code, crate::output::ErrorCode::Usage, "cmd 应被拦截");
+            assert!(err.message.contains("sh -c"), "消息应含绕过指引");
+        }
+    }
+
+    #[test]
+    fn shell_allows_quoted_device_literal() {
+        // 单 token（引号包裹）不触发防护；此时失败于 backend 不可用而非 USAGE
+        let state = DaemonState::new(Config::default());
+        let out = state.execute(
+            &Command::Shell {
+                cmd: vec!["sh -c 'echo --device'".to_owned()],
+                device: None,
+            },
+            Path::new("/tmp"),
+        );
+        assert!(!out.ok);
+        assert_ne!(out.error.unwrap().code, crate::output::ErrorCode::Usage);
     }
 }

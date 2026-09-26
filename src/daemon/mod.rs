@@ -253,9 +253,10 @@ pub fn wait_daemon_gone_in(dir: &std::path::Path, timeout: Duration) -> BResult<
             return Ok(());
         }
         if Instant::now() >= deadline {
-            return Err(ErrorBody::timeout(
-                "旧 daemon 未在 10 秒内退出（可能有长命令在飞，可稍后重试 daemon-status 确认）",
-            ));
+            return Err(ErrorBody::timeout(format!(
+                "旧 daemon 未在 {} 秒内退出（可能有长命令在飞，可稍后重试 daemon-status 确认）",
+                timeout.as_secs()
+            )));
         }
         std::thread::sleep(Duration::from_millis(100));
     }

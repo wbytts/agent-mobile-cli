@@ -1,0 +1,25 @@
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.10s
+     Running tests/adb_integration.rs (target/debug/deps/adb_integration-07c3a999bbc43ef6)
+
+running 2 tests
+test devices_contains_target_online_and_resolves ... ok
+test connect_after_disconnect_succeeds ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 54 filtered out; finished in 0.09s
+
+     Running tests/control_integration.rs (target/debug/deps/control_integration-10eeb4fedc22e19e)
+
+running 10 tests
+test apps_contains_settings_and_filter_works ... ok
+test logcat_respects_line_limit ... ok
+test input_text_ascii_succeeds_and_non_ascii_rejected ... ok
+test launch_and_stop_settings ... ok
+test offline_device_yields_structured_error ... ok
+test concurrent_snapshots_both_succeed ... ok
+test snapshot_returns_tree_with_refs ... ok
+test screenshot_writes_valid_png ... ok
+test shell_getprop_returns_model_with_exit_zero ... ok
+test tap_coord_changes_ui ... ok
+
+test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 54 filtered out; finished in 18.06s
+
