@@ -27,7 +27,7 @@
     "383a8dbf-e7bb-4e09-9d20-e34c7e9b4a83"
   ],
   "revision": "0460093c3790b69595360048b67945eeb807d03dec30fc6cfd45d5c0010695a8",
-  "stage": "build-review-passed",
+  "stage": "done",
   "sessionId": "init-adb-core-build",
   "evidence": [
     "24/24 任务全部勾选；提交序列 ff90a66..26b9501",

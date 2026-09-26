@@ -1,6 +1,9 @@
 {
   "schemaVersion": 1,
   "taskIds": [
+    "aac0aabc-9089-41b4-b30a-8d2e78b2c96c",
+    "155f973a-2b09-4aa6-8c29-9fd60aa5e8ce",
+    "b8f7acdc-c280-490a-ab6d-f12cb9d85907",
     "627002aa-d98c-493d-8278-b05562c0666d",
     "2cf57575-7d35-4f1d-9566-35e698f40d7a",
     "5faf1b78-9cba-40e8-9dfe-392d2de93f0e",
@@ -10,21 +13,31 @@
     "ede50616-6063-4c3d-9503-d5c2870b415b",
     "7cf82c41-e766-45ff-bb94-9841f81d5d1d",
     "1b9f0a2d-fe58-4cce-bf3f-30e40613daa6",
-    "8e1074c3-e5d7-412c-a3d6-4cf3db1f5407"
+    "8e1074c3-e5d7-412c-a3d6-4cf3db1f5407",
+    "d694d982-c500-4692-bbd5-c72b7796bb1a",
+    "eea065a5-e566-43bb-bc82-1eb883a430f6",
+    "38910be9-474a-4096-92f4-f6754534e220",
+    "c39d64c0-29ae-45b8-8fa0-42c28d1cc46d",
+    "abde685c-fc82-42b8-92ba-cb12ac9622ad",
+    "703fbaef-5f87-4714-8e74-5cea36654033",
+    "5be39b82-14a3-4d5d-99d4-61b2aeceb3b8",
+    "93f996b8-1581-4ea5-8dd5-b72e9f52f4c6",
+    "92ae8a59-b613-45e5-a3b3-6ef4fc8bff5d",
+    "e1cf9c74-821c-4df8-bd26-3d743e05b014",
+    "383a8dbf-e7bb-4e09-9d20-e34c7e9b4a83"
   ],
   "revision": "0460093c3790b69595360048b67945eeb807d03dec30fc6cfd45d5c0010695a8",
-  "stage": "implementing",
+  "stage": "done",
   "sessionId": "init-adb-core-build",
   "evidence": [
-    "组1已提交 ff90a66（17 测试全绿）",
-    "契约骨架已提交 15f7695（backend 5 测试过，adb 2 + ui 5 测试 RED）",
-    "派发 DaemonImpl（组2: daemon lock/http/ws/生命周期，独占 src/daemon 与 src/main.rs）",
-    "派发 AdbImpl（组3 库层: adb 探测/枚举/connect/AdbBackend，独占 src/adb 与 src/backend/adb.rs）",
-    "派发 UiImpl（组4.1 库层: ui 简化树，独占 src/ui.rs）"
+    "24/24 任务全部勾选；提交序列 ff90a66..26b9501",
+    "cargo test 85+54+54 全绿；MuMu 集成 12 项通过；clippy --all-targets -D warnings 干净；fmt 干净",
+    "standard review：reviewer 初审 3 IMPORTANT + 6 MINOR 全部修复（ed0509e）；1 轮复查结论 correct，无残留 CRITICAL/IMPORTANT；复查 6 条新 P3 中 N4/N5 已修（26b9501）",
+    "6.1 端到端验收 10 项 PASS（connect 幂等/枚举/歧义/launch 前台/apps/stop/非 ASCII NOT_SUPPORTED/input/key/screenshot PNG/logcat ≤N 无块头/daemon 生命周期/离线 DEVICE_NOT_FOUND），MuMu 模拟器 + NTH-AN00 真机双端验证",
+    "npm pack 全局安装实测：--version 与 devices 通过（vendor 预置二进制装配成功）"
   ],
   "unresolved": [
-    "组4.2-4.8 控制命令实现待 AdbImpl 完成后派发或主会话实施",
-    "CLI 命令经 daemon 执行的接线待 DaemonImpl 完成后主会话统一实施"
+    "复查 P3 打磨项（已确认接受，后续 change 处理）：N1 remove_stale_lock 未同步启动宽限（用户可见行为已正确）；N2 漂移判定用 port_listening（三重巧合下 stop 误击外部服务）；N3 卡死 daemon 进程无 CLI 清理出路；N6 dump 失败设备端残留 + dump 锁跨设备串行"
   ],
-  "reviewRounds": 0
+  "reviewRounds": 1
 }
