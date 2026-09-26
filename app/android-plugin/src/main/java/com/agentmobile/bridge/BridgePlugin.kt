@@ -136,7 +136,9 @@ class BridgePlugin(private val activity: Activity) : Plugin(activity) {
             attr(out, "class", "bridge.Truncated")
             attr(out, "package", node.packageName?.toString() ?: "")
             attr(out, "content-desc", "")
-            attr(out, "bounds", "[0,0][0,0]")
+            // bounds 必须非零面积：CLI 简化树会剔除零面积节点（render_node 首判 r<=l||b<=t），
+            // [0,0][1,1] 使占位在默认 snapshot 中可见；占位不可点击，不会进入 @eN 引用。
+            attr(out, "bounds", "[0,0][1,1]")
             out.append("/>")
             return
         }

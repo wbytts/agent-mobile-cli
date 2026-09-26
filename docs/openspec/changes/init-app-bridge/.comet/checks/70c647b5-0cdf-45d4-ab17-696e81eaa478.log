@@ -1,0 +1,18 @@
+
+running 164 tests
+....................................................................................... 87/164
+.............................................................................
+test result: ok. 164 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 3.03s
+
+
+running 95 tests
+...............................................................i...........i........... 87/95
+........
+test result: ok. 93 passed; 0 failed; 2 ignored; 0 measured; 0 filtered out; finished in 0.05s
+
+
+running 103 tests
+...............i.........................................i...............i.ii...i.....i 87/103
+i.ii............
+test result: ok. 93 passed; 0 failed; 10 ignored; 0 measured; 0 filtered out; finished in 0.05s
+
