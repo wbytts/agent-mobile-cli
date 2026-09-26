@@ -1,3 +1,9 @@
+---
+comet_change: init-app-bridge
+role: technical-design
+canonical_spec: openspec
+---
+
 # Design
 
 ## Context
@@ -27,6 +33,14 @@
 5. **UI 树序列化复用 adb 模式同一简化模型**：AccessibilityService `rootInActiveWindow` 递归序列化为与 uiautomator dump 相同的节点结构（文本/类型/坐标区域），CLI 侧复用同一 `@eN` 引用分配逻辑，保证两后端输出结构一致。
 6. **能力集协商**：`hello` 消息携带能力列表（tap/swipe/uiTree/screenshot/script），CLI 路由前按能力集校验，缺失即返回不支持错误（对应 app-backend 能力降级要求）。
 7. **App 内连接保活**：前台服务（foreground service）维持 WS 连接与心跳，避免系统回收导致频繁掉线。
+8. **配对认证模型（双通道）**：桥接监听启动时 daemon 生成 6 位一次性配对码（首次使用或 daemon 重启后失效），`agent-mobile-cli pair` 显示配对码与候选局域网 IP 并在终端输出配对二维码（unicode block），二维码内容 URI `agent-mobile://pair?host=<ip>&port=<port>&code=<code>`；App 可手动输入地址+配对码，或扫码（相机权限 + ML Kit/zxing）解析 URI 自动填入并发起配对。配对码验证通过后 daemon 下发长期 token（32 字节随机 hex，存 daemon 配置目录与 App 本地），后续 hello 凭 token 认证；`agent-mobile-cli pair --reset` 重新生成配对码并使全部已发 token 失效。理由：局域网明文 WS 的最低信任门槛，一次性配对码收窄泄露面，token 可撤销；扫码消除真机手动输入成本（MuMu 模拟器走手动通道）。备选无认证放弃：同网段任意主机可控制设备；备选 mDNS 自动发现放弃：多一套发现协议与平台权限，首版手动/扫码已够用。
+9. **App UI 为多页诊断型**：连接页（daemon 地址/配对码输入/连接状态）、能力自检页（无障碍权限状态 + 逐项能力自测按钮）、日志页（最近命令与连接事件）。用户已确认（2026-09-26 晚对账）；替代此前单页基础 UI 的设想。
+10. **协议层全在 App 的 Rust core**：WS 客户端（tokio-tungstenite）、协议消息（serde）、QuickJS 沙盒（rquickjs bundled）均在 Rust core；Kotlin 仅承担 AccessibilityService 能力桥、前台服务保活、扫码（ML Kit/zxing）。`mobile.*` 脚本调用经 Tauri 插件命令桥到 Kotlin 执行后回传。理由：协议/沙盒逻辑与 CLI 同栈（tokio/serde）可单测可复用，Kotlin 面最小化。
+11. **协议类型单一来源**：CLI 侧协议模块（serde 消息类型）被 App Rust core 以 path 依赖直接引用，两端不各自维护消息定义。
+12. **app-bridge 后端能力集**：桥接设备 id 形如 `bridge:<name>`；可用：snapshot/tap/swipe/input/key/screenshot/apps/launch；NOT_SUPPORTED：stop/logcat/shell（用户确认全命令对齐、受限降级），返回结构化能力不支持错误，不静默路由到其他后端。
+13. **配对二维码与地址枚举**：qrcode crate 终端 unicode 输出配对 URI；局域网候选 IP 枚举默认路由网卡优先、全部候选列出（多网卡主机）。
+14. **token 双侧存储**：daemon 侧配置目录（随 config.json 同目录 tokens 存储）；App 侧 SharedPreferences（私有模式）。`pair --reset` 重新生成配对码并清空全部已发 token。
+15. **截图消息内联**：base64 PNG 内联于 result（WS 帧上限默认 16MB，1440×2560 PNG 约 1-3MB 足够）；二进制帧升级留后续。
 
 ## Risks / Trade-offs
 
@@ -35,6 +49,14 @@
 - MuMu arm64 对 QuickJS 原生库兼容性 → 先编译验证 arm64-v8a so 加载，再集成
 - base64 截图消息体积大 → 首版接受；后续可升级二进制帧
 - 前台服务带来常驻通知 → Android 平台要求，不可去除，UI 中说明用途
+
+## Test Strategy
+
+- Rust core（App 侧）：cargo 单测覆盖协议编解码、QuickJS 沙盒 `mobile.*` 绑定、配对状态机（配对码验证/token 签发与校验/重置失效）
+- daemon WS：Rust 集成测试以模拟 WS client 完成 hello（配对码与 token 两种路径）/command/result/script/断线重连全流程
+- app-bridge 后端：单测覆盖能力降级错误、devices 合并枚举、桥接路由输出结构与 ADB 后端一致
+- Kotlin/UI：MuMu 手动验收（6.1 清单）+ 荣耀真机扫码验证；首版不引入 instrumented test 框架
+- 端到端：安装 → 无障碍授权 → 手动与扫码配对 → devices 可见 → snapshot → `mobile.tap` 脚本 → screenshot → 断线重连 → `pair --reset` 旧 token 失效
 
 ## Migration Plan
 

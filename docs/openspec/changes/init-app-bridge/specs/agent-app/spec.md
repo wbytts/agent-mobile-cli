@@ -8,12 +8,22 @@
 
 ### Requirement: daemon 连接管理
 
-App SHALL 支持配置 daemon 地址（host:port），发起桥接连接并显示连接状态；连接断开后 SHALL 自动重连。
+App SHALL 支持配置 daemon 地址（host:port）与配对码发起桥接连接，或扫码解析配对 URI 自动填入地址与配对码；连接后显示连接状态；连接断开后 SHALL 自动重连（已配对设备凭保存的 token 免配对）。
 
-#### Scenario: 配置地址后连接成功
+#### Scenario: 手动配置地址与配对码后连接成功
 
-- **WHEN** 用户在 App 中输入主机与桥接端口并发起连接
+- **WHEN** 用户在 App 中输入主机、桥接端口与配对码并发起连接
 - **THEN** App 显示已连接状态，daemon 侧出现对应设备注册
+
+#### Scenario: 扫码快速配对
+
+- **WHEN** 用户在 App 中扫码识别 `agent-mobile://pair?...` 二维码
+- **THEN** App 解析 URI 自动填入地址与配对码并发起连接，无需手动输入
+
+#### Scenario: 配对码错误提示
+
+- **WHEN** App 提交的配对码错误或失效
+- **THEN** App 显示认证失败原因并停留在连接页，不产生设备注册
 
 ### Requirement: 无障碍设备操作
 
@@ -37,6 +47,20 @@ App SHALL 内嵌 JS 引擎执行 daemon 下发的脚本，向脚本暴露 `mobil
 
 - **WHEN** 沙盒执行包含 `mobile.tap(x, y)` 的脚本
 - **THEN** 设备对应位置收到点击，脚本继续执行并返回结果
+
+### Requirement: 多页诊断界面
+
+App SHALL 提供多页诊断界面：连接页（地址/配对码/扫码入口/连接状态）、能力自检页（无障碍权限状态与逐项能力自测）、日志页（最近命令与连接事件）。
+
+#### Scenario: 三页切换与状态展示
+
+- **WHEN** 用户在三个页面间切换
+- **THEN** 各页正确渲染当前状态（连接状态、权限状态、日志列表）
+
+#### Scenario: 能力自检
+
+- **WHEN** 用户在能力自检页执行某项能力自测（如截图、UI 树读取）
+- **THEN** App 在本地执行该项能力并展示成功或失败原因，无需经 daemon 下发命令
 
 ### Requirement: 屏幕截图回传
 

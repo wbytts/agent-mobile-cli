@@ -7,9 +7,10 @@ ADB 直连模式要求设备与主机 adb 可达，无法覆盖真机无线调�
 ## What Changes
 
 - 定稿桥接 WebSocket 协议：连接注册（设备信息 + 能力集）、心跳、命令分发、结果回传（在 `init-adb-core` 预留的 WS 监听之上实现）
+- 配对认证：daemon 生成一次性配对码（`agent-mobile-cli pair` 显示配对码/局域网地址/配对二维码），App 手动输入或扫码配对后获得长期 token，token 可重置撤销
 - 基于 Tauri 2 的 Android 调试 App 骨架与构建链（debug 构建可安装到 MuMu 模拟器）
 - Kotlin 原生能力：AccessibilityService 设备操作（点击/滑动/UI 树读取/截图）、内嵌 JS 引擎的脚本沙盒（暴露 `mobile.*` 设备操作 API）、无障碍权限开启引导
-- App 内 WS 客户端：daemon 地址配置、连接状态显示、自动重连
+- App 内 WS 客户端与多页诊断界面：连接页（地址/配对码/扫码）、能力自检页、日志页；自动重连
 - CLI 侧 `app-bridge` 后端：实现 `init-adb-core` 定义的统一后端接口，把控制命令路由到桥接设备；设备枚举合并显示桥接设备；不支持的能力返回明确降级错误
 
 ## Capabilities

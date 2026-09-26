@@ -38,6 +38,35 @@ daemon SHALL 支持通过桥接连接向指定设备下发命令消息（请求�
 - **WHEN** App 执行命令失败（如目标元素不可交互）
 - **THEN** 回传错误信息，CLI 输出结构化错误并以非零退出码结束
 
+### Requirement: 配对认证
+
+daemon SHALL 在桥接监听启动时生成一次性配对码，并提供 CLI 命令（`agent-mobile-cli pair`）显示配对码、候选局域网地址与配对二维码（URI 含 host/port/配对码）；App 首次注册 SHALL 提交配对码，验证通过后 daemon 下发长期 token，后续连接凭 token 认证；配对码错误或缺失时 daemon SHALL 拒绝注册。
+
+#### Scenario: 显示配对信息
+
+- **WHEN** 用户执行 `agent-mobile-cli pair`
+- **THEN** 输出当前配对码、候选局域网地址与配对二维码（URI `agent-mobile://pair?host=...&port=...&code=...`）
+
+#### Scenario: 首次配对成功
+
+- **WHEN** App 首次连接并提交正确配对码（手动输入或扫码 URI 解析）
+- **THEN** daemon 验证通过并下发长期 token，App 保存 token 并完成注册
+
+#### Scenario: 凭 token 重连免配对
+
+- **WHEN** 已配对 App 使用保存的 token 重新连接
+- **THEN** daemon 验证 token 后直接完成注册，无需再次输入配对码
+
+#### Scenario: 配对码错误被拒
+
+- **WHEN** App 提交错误或已失效的配对码
+- **THEN** daemon 拒绝注册并返回认证错误，设备不出现在枚举中
+
+#### Scenario: 重置配对
+
+- **WHEN** 用户执行 `agent-mobile-cli pair --reset`
+- **THEN** daemon 重新生成配对码，此前下发的全部 token 失效，已连接设备被要求重新配对
+
 ### Requirement: 脚本下发执行
 
 协议 SHALL 支持脚本动作，携带 JS 源码由 App 在脚本沙盒中执行，并将脚本返回值或异常回传 daemon。

@@ -1,0 +1,18 @@
+{
+  "change": "init-app-bridge",
+  "phase": "design",
+  "mode": "compact",
+  "canonical_spec": "openspec",
+  "task_hash_policy": "task-content-v1",
+  "generated_by": "comet-handoff.sh",
+  "context_hash": "9a5fc2aa1bd81fbf6669cc0d421278c1e2664487b00f45d1fe0d3915416f0e01",
+  "files": [
+    { "path": "docs/openspec/changes/init-app-bridge/proposal.md", "sha256": "d075e6f0704153fee0feba383487a954317e1d7d9ed9208f75a5f2343a5b51f9" },
+    { "path": "docs/openspec/changes/init-app-bridge/design.md", "sha256": "6f69ab75b9d9f96631da9782823cd30d26964bf34e9cbbfe7c89872fa3d68e23" },
+    { "path": "docs/openspec/changes/init-app-bridge/tasks.md", "sha256": "ce6444f6bdf6c066f70bd121f5c3d1fce2af762c7740ae77a7b8defd6e510814" },
+    { "path": "docs/openspec/changes/init-app-bridge/.openspec.yaml", "sha256": "062e545e250441aa0692c22d7a65e07334f1c0f2e706c0e297f36065b6a0699c" },
+    { "path": "docs/openspec/changes/init-app-bridge/specs/agent-app/spec.md", "sha256": "d5d4d9cd2d023b25b7ad0da56259afac3c055fd4c0f5a4fa5bbb9603c517e1a7" },
+    { "path": "docs/openspec/changes/init-app-bridge/specs/app-backend/spec.md", "sha256": "75d6e0c7c52f495436f24c9150a7c866989e521e624e77a5ed09bcdf22348acd" },
+    { "path": "docs/openspec/changes/init-app-bridge/specs/bridge-protocol/spec.md", "sha256": "b3c2107cc0d3dda22565ed529ee71bb835025f4440d1795aed650b110054339c" }
+  ]
+}
