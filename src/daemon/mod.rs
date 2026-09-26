@@ -22,6 +22,11 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::sync::Notify;
 
+/// HTTP 管理端点只绑 loopback（/pair-info 含配对码，绝不上 LAN）。
+const HTTP_BIND_ADDR: &str = "127.0.0.1";
+/// 桥接 WS 绑全部接口：design.md 决策 8 的 LAN 威胁模型要求真机直连可达，
+/// 暴露面由一次性配对码 + token 认证兜底。
+const WS_BIND_ADDR: &str = "0.0.0.0";
 /// 前台运行 daemon：获取启动锁，同时监听 HTTP 与 WS 端口；ctrl-c 或 /shutdown 时清理锁退出。
 pub fn run(config: &Config) -> BResult<()> {
     let runtime = tokio::runtime::Builder::new_multi_thread()
@@ -40,19 +45,19 @@ async fn run_async(config: &Config) -> BResult<()> {
             )));
         }
     };
-    let http_listener = tokio::net::TcpListener::bind(("127.0.0.1", config.http_port))
+    let http_listener = tokio::net::TcpListener::bind((HTTP_BIND_ADDR, config.http_port))
         .await
         .map_err(|e| {
             ErrorBody::io_error(format!("绑定 HTTP 端口 {} 失败: {e}", config.http_port))
         })?;
-    let ws_listener = tokio::net::TcpListener::bind(("127.0.0.1", config.bridge_port))
+    let ws_listener = tokio::net::TcpListener::bind((WS_BIND_ADDR, config.bridge_port))
         .await
         .map_err(|e| {
             ErrorBody::io_error(format!("绑定桥接 WS 端口 {} 失败: {e}", config.bridge_port))
         })?;
     // 启动行写入 stderr：后台运行时落入 daemon.log，便于排查
     eprintln!(
-        "daemon 已启动：pid={} http=127.0.0.1:{} ws=127.0.0.1:{}",
+        "daemon 已启动：pid={} http={HTTP_BIND_ADDR}:{} ws={WS_BIND_ADDR}:{}",
         lock.info.pid, config.http_port, config.bridge_port
     );
     let shutdown = Arc::new(Notify::new());
@@ -403,6 +408,24 @@ mod tests {
     use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
     use std::sync::Arc;
 
+    #[tokio::test]
+    async fn bridge_ws_binds_lan_http_stays_loopback() {
+        // design.md 决策 8 威胁模型：桥接 WS 对 LAN 可达（真机扫码/直连），
+        // HTTP 管理端点（/pair-info 含配对码）必须保持 loopback。
+        assert_eq!(WS_BIND_ADDR, "0.0.0.0");
+        assert_eq!(HTTP_BIND_ADDR, "127.0.0.1");
+        // 绑定行为可执行性：WS 通配地址可绑且接受本机连接
+        let listener = tokio::net::TcpListener::bind((WS_BIND_ADDR, 0))
+            .await
+            .expect("WS 应可绑定 0.0.0.0");
+        let port = listener.local_addr().unwrap().port();
+        let accept = tokio::spawn(async move { listener.accept().await });
+        let client = tokio::net::TcpStream::connect(("127.0.0.1", port))
+            .await
+            .expect("应可连接 WS 监听端口");
+        drop(client);
+        accept.await.unwrap().expect("应接受连接");
+    }
     /// 极简 HTTP stub：任何请求返回 200 + JSON；记录 /shutdown 命中次数。
     struct StubServer {
         port: u16,

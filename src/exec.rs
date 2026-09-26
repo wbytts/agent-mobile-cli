@@ -559,7 +559,7 @@ mod tests {
             android_version: "12".into(),
             capabilities: full_bridge_caps(),
         };
-        let (id, _conn) = state.bridge().register(&hello, tx);
+        let (id, _conn, _close) = state.bridge().register(&hello, tx);
         (id, rx)
     }
 

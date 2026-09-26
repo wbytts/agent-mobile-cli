@@ -1,5 +1,0 @@
-R_DEF: Internal format may change without notice
-local
-string bridge_service_description
-string bridge_service_label
-xml bridge_accessibility_service_config

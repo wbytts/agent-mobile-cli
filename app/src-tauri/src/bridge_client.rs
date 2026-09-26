@@ -94,6 +94,8 @@ pub trait BridgePlatform: Send + Sync {
     /// 上次成功连接的 daemon 地址（冷启动自动连接 + 连接页回填用）。
     fn load_address(&self) -> Option<(String, u16)>;
     fn save_address(&self, host: &str, port: u16);
+    /// 清除该 host:port 的已存 token（认证被拒=失效证据，清除后下次 hello 走配对码）。
+    fn delete_token(&self, host: &str, port: u16);
     /// 触发相机扫码（Kotlin 扫码页），返回扫描内容；用户取消/权限被拒返回 Err。
     fn scan_pair_qr(&self) -> Result<String, String>;
 }
@@ -176,6 +178,12 @@ impl Session {
                 device_id: self.device_id(),
             };
         } else {
+            // 协议上 hello 的拒绝原因均为认证类（配对码错误/失效、token 无效、缺少凭证），
+            // 见 docs/bridge-protocol.md hello_ack error 字段说明。token 被服务端明确拒绝
+            // 即失效证据：清除已存 token，下次 hello 自然走配对码（修复 pair --reset 后
+            // 旧 token 反复抢占 hello 导致配对码永远轮不到的死锁）。
+            // 若本次 hello 本就未带 token（配对码路径被拒），delete_token 是无害 no-op。
+            self.platform.delete_token(&self.host, self.port);
             self.state = ConnState::Pairing {
                 reason: ack
                     .error
@@ -216,6 +224,8 @@ pub fn handle_command(ops: &Arc<dyn MobileOps>, cmd: &CommandMessage) -> ResultM
 }
 
 /// script{id,source} → Sandbox 执行 → script_result（ok/异常回传）。
+/// Sandbox 默认 25s 执行超时 + 64MB 内存上限（sandbox.rs），死循环/爆内存脚本
+/// 会在 daemon 心跳超时（30s）前中断并回传结构化错误，spawn_blocking 不会永久卡住。
 pub fn handle_script(ops: &Arc<dyn MobileOps>, msg: &ScriptMessage) -> ResultMessage {
     match Sandbox::new(ops.clone()).run(&msg.source) {
         Ok(value) => ResultMessage {
@@ -727,6 +737,9 @@ mod tests {
                 .lock()
                 .insert(format!("{host}:{port}"), token.to_string());
         }
+        fn delete_token(&self, host: &str, port: u16) {
+            self.tokens.lock().remove(&format!("{host}:{port}"));
+        }
         fn load_address(&self) -> Option<(String, u16)> {
             self.address.lock().clone()
         }
@@ -840,6 +853,35 @@ mod tests {
         let bad: Arc<dyn BridgePlatform> = Arc::new(MemoryPlatform::new());
         bad.save_address("", 0);
         assert_eq!(auto_connect_target(&bad), None);
+    }
+
+    /// 回归：pair --reset 后旧 token 被拒 → 必须清除已存 token，
+    /// 下次 hello 走配对码（否则 token 优先导致配对码永远轮不到，死锁）。
+    #[test]
+    fn hello_ack_reject_clears_stored_token_and_falls_back_to_code() {
+        let platform = Arc::new(MemoryPlatform::with_token(
+            "192.168.1.10",
+            18777,
+            "ef".repeat(32).as_str(),
+        ));
+        let mut s = session(platform.clone(), Arc::new(MockOps::new()), Some("248266"));
+        // 首连 hello 带失效 token
+        assert_eq!(s.hello().token.as_deref(), Some("ef".repeat(32).as_str()));
+        let state = s.on_hello_ack(&HelloAck {
+            ok: false,
+            token: None,
+            error: Some("token 无效".to_string()),
+        });
+        assert!(matches!(state, ConnState::Pairing { .. }));
+        assert_eq!(
+            platform.load_token("192.168.1.10", 18777),
+            None,
+            "认证被拒必须清除已存 token"
+        );
+        // 用户输新配对码重连：hello 带配对码而非失效 token
+        let hello = s.hello();
+        assert_eq!(hello.token, None);
+        assert_eq!(hello.pairing_code.as_deref(), Some("248266"));
     }
 
     #[test]

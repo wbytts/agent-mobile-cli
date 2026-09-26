@@ -4,7 +4,9 @@ CLI daemon 与设备端调试 App 之间的 WebSocket 桥接协议。消息类�
 `src/bridge_proto.rs`（App Rust core 以 path 引用同一文件，design.md 决策 11）；
 本文档与该文件逐字段一致，修改协议时必须同步更新。
 
-- 传输：WebSocket 文本帧（JSON，UTF-8）；daemon 监听 `127.0.0.1:<bridge_port>`（默认 18777）。
+- 传输：WebSocket 文本帧（JSON，UTF-8）；daemon 监听 `0.0.0.0:<bridge_port>`（默认 18777，
+  LAN 可达以支持真机直连/扫码配对，design.md 决策 8；暴露面由一次性配对码 + token 认证兜底）。
+  HTTP 管理端点（含 `/pair-info` 配对码）仍只绑定 `127.0.0.1:18775`。
 - 帧上限：默认 16MB；截图等二进制以 base64 内联于 `result`（design.md 决策 15）。
 - 请求关联：`command`/`script` 的 `id` 由 daemon 生成（`cmd-<n>`），App 回传 `result` 携带同一 `id`。
 
@@ -133,8 +135,10 @@ daemon 收到后按 `id` 唤醒等待方并回 `result_ack`；未知 `id`（如�
 
 - `uiTree` 的 `full` 语义由 CLI 侧处理（full=原始 XML 直出，否则 CLI 复用同一
   `@eN` 简化分配逻辑，design.md 决策 5）；App 始终返回完整 XML。
-- `apps` 的 `filter`（包名子串过滤）与 `all`（含系统应用）由设备侧执行，
-  与 ADB 后端 `pm list packages [-3]` 语义一致。
+- `apps` 的 `filter` 与 `all`（含系统应用）由设备侧执行。ADB 后端为
+  `pm list packages [-3]`（第三方/全部包名）；桥接后端按 launcher 入口枚举
+  （非 all 时有启动入口的应用，filter 匹配包名与应用标签子串）——两后端
+  集合语义不同属预期（移动端无 pm 等价物），调用方不应假设一致。
 - CLI `agent-mobile-cli script <file.js|->` 命令对应 `script` 帧（daemon 侧要求
   hello 上报 `script` 能力，缺失即 NOT_SUPPORTED 不下发）。
 - 所有 command/script 下发前 daemon 按 hello `capabilities` 校验（决策 6）：
@@ -178,7 +182,8 @@ daemon 收到后按 `id` 唤醒等待方并回 `result_ack`；未知 `id`（如�
 3. App 首次连接提交配对码 → 验证通过签发长期 token（32 字节随机 hex，64 字符），
    追加记录到 daemon 配置目录 `tokens.json`，配对码同时失效。
 4. 后续连接凭 token 认证直过；`agent-mobile-cli pair --reset`（`POST /pair-reset`）
-   重新生成配对码并清空全部已签发 token。
+   重新生成配对码、清空全部已签发 token，并断开全部已连接桥接设备（发 Close 帧、
+   立即标离线），设备需用新配对码重新配对。
 
 ## 连接生命周期
 

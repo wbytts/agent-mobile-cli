@@ -107,10 +107,24 @@ async fn handle_connection(
 
     // 注册设备：出站帧经 mpsc 由写循环发出
     let (tx, mut rx) = mpsc::unbounded_channel::<String>();
-    let (device_id, conn_id) = registry.register(&hello, tx.clone());
+    let (device_id, conn_id, close) = registry.register(&hello, tx.clone());
 
     loop {
         tokio::select! {
+            // 主动踢下线（pair --reset）：发 Close 帧后结束连接
+            _ = close.notified() => {
+                let _ = sink.send(Message::Close(None)).await;
+                // 短窗口 drain 等对端 Close 应答再丢弃 socket，消除 ResetWithoutClosingHandshake 竞态
+                let _ = tokio::time::timeout(Duration::from_millis(200), async {
+                    while let Some(msg) = inbound.next().await {
+                        if matches!(msg, Ok(Message::Close(_))) {
+                            break;
+                        }
+                    }
+                })
+                .await;
+                break;
+            }
             // 出站：注册表路由的 command/script/pong/result_ack
             out = rx.recv() => {
                 let Some(text) = out else { break }; // 全部发送方消失
@@ -421,6 +435,77 @@ mod tests {
         let r = wait.await.unwrap();
         assert!(!r.ok);
         assert_eq!(r.error.as_deref(), Some("沙盒异常"));
+        fx.shutdown.notify_one();
+    }
+
+    #[tokio::test]
+    async fn reset_disconnects_active_connection() {
+        // spec「重置配对」：pair --reset 后已连接设备被断开并要求重新配对
+        let fx = spawn_server().await;
+        let (code, _) = fx.pairing.pairing_code();
+        let mut ws = connect(fx.port).await;
+        send_text(&mut ws, hello_msg(Some(&code), None)).await;
+        let ack = recv_json(&mut ws).await;
+        let token = ack["token"].as_str().unwrap().to_string();
+
+        // 等价于 POST /pair-reset 的处理：清空 token + 断开全部活跃连接
+        fx.pairing.reset();
+        fx.registry.disconnect_all();
+
+        // 连接应被服务端优雅关闭：发 Close 帧后 drain 等对端应答，消除 RST 竞态
+        let res = tokio::time::timeout(std::time::Duration::from_secs(5), ws.next())
+            .await
+            .expect("reset 后连接应被关闭");
+        match res {
+            Some(Ok(Message::Close(_))) => {}
+            other => panic!("应收到 Close 帧: {other:?}"),
+        }
+        // 设备标离线；旧 token 重连被拒
+        for _ in 0..50 {
+            if fx.registry.device_records()[0].state == crate::backend::DeviceState::Offline {
+                break;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+        }
+        assert_eq!(
+            fx.registry.device_records()[0].state,
+            crate::backend::DeviceState::Offline
+        );
+        let mut ws2 = connect(fx.port).await;
+        send_text(&mut ws2, hello_msg(None, Some(&token))).await;
+        let ack2 = recv_json(&mut ws2).await;
+        assert_eq!(ack2["ok"], false, "reset 后旧 token 应被拒");
+        fx.shutdown.notify_one();
+    }
+
+    #[tokio::test]
+    async fn same_name_reconnect_kicks_old_connection() {
+        // 同名设备二次注册：旧连接收到 Close 帧被踢下线，走断线重连闭环
+        let fx = spawn_server().await;
+        let (code, _) = fx.pairing.pairing_code();
+        let mut ws1 = connect(fx.port).await;
+        send_text(&mut ws1, hello_msg(Some(&code), None)).await;
+        let ack = recv_json(&mut ws1).await;
+        let token = ack["token"].as_str().unwrap().to_string();
+
+        let mut ws2 = connect(fx.port).await;
+        send_text(&mut ws2, hello_msg(None, Some(&token))).await;
+        let ack2 = recv_json(&mut ws2).await;
+        assert_eq!(ack2["ok"], true);
+
+        // 旧连接应被服务端关闭（Close 帧）
+        let res = tokio::time::timeout(std::time::Duration::from_secs(5), ws1.next())
+            .await
+            .expect("旧连接应被踢下线");
+        match res {
+            Some(Ok(Message::Close(_))) | None => {}
+            other => panic!("旧连接应被关闭: {other:?}"),
+        }
+        // 新连接仍在线
+        assert_eq!(
+            fx.registry.device_records()[0].state,
+            crate::backend::DeviceState::Online
+        );
         fx.shutdown.notify_one();
     }
 }

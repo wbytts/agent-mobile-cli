@@ -84,6 +84,10 @@ mod imp {
             );
         }
 
+        fn delete_token(&self, host: &str, port: u16) {
+            let _ = self.call("deleteBridgeToken", json!({ "host": host, "port": port }));
+        }
+
         fn set_foreground(&self, running: bool) {
             let command = if running {
                 "startForegroundService"
@@ -243,6 +247,8 @@ mod imp {
         }
 
         fn save_token(&self, _host: &str, _port: u16, _token: &str) {}
+
+        fn delete_token(&self, _host: &str, _port: u16) {}
 
         fn set_foreground(&self, _running: bool) {}
 

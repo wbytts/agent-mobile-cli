@@ -13,3 +13,4 @@ node_modules/
 # app/ Tauri 工程构建产物
 /app/src-tauri/target/
 /app/src-tauri/gen/
+/app/android-plugin/build/

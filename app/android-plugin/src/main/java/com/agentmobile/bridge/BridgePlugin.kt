@@ -127,6 +127,17 @@ class BridgePlugin(private val activity: Activity) : Plugin(activity) {
 
     private fun serializeNode(node: AccessibilityNodeInfo, out: StringBuilder, depth: Int) {
         if (depth > MAX_TREE_DEPTH) {
+            // 深度截断可观测：超深节点不再静默丢弃，而是在其父节点下输出占位节点，
+            // 便于排查 snapshot 缺节点问题（每个被截断的子节点各产生一个占位）。
+            out.append("<node")
+            attr(out, "index", "0")
+            attr(out, "text", "[truncated: depth>$MAX_TREE_DEPTH]")
+            attr(out, "resource-id", "")
+            attr(out, "class", "bridge.Truncated")
+            attr(out, "package", node.packageName?.toString() ?: "")
+            attr(out, "content-desc", "")
+            attr(out, "bounds", "[0,0][0,0]")
+            out.append("/>")
             return
         }
         val bounds = Rect()
@@ -405,6 +416,15 @@ class BridgePlugin(private val activity: Activity) : Plugin(activity) {
         val args = invoke.getArgs()
         val key = tokenKey(args.getString("host"), args.getInt("port"))
         prefs().edit().putString(key, args.getString("token")).apply()
+        invoke.resolve()
+    }
+
+    /** 删除已存 token（hello_ack 认证拒绝 = token 失效证据，Rust 侧调用）。 */
+    @Command
+    fun deleteBridgeToken(invoke: Invoke) {
+        val args = invoke.getArgs()
+        val key = tokenKey(args.getString("host"), args.getInt("port"))
+        prefs().edit().remove(key).apply()
         invoke.resolve()
     }
 

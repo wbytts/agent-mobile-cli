@@ -143,16 +143,28 @@ fn generate_token() -> String {
     bytes.iter().map(|b| format!("{b:02x}")).collect()
 }
 
-/// 原子写入 tokens.json（tmp + rename）。
+/// 原子写入 tokens.json（tmp + rename）。token 等价长期凭证：
+/// 配置目录 0700、tokens.json 0600（unix），避免同机其他用户读取。
 fn save_tokens(dir: &Path, tokens: &[TokenRecord]) -> std::io::Result<()> {
     std::fs::create_dir_all(dir)?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(dir, std::fs::Permissions::from_mode(0o700))?;
+    }
     let file = TokensFile {
         tokens: tokens.to_vec(),
     };
     let body = serde_json::to_string_pretty(&file)?;
     let tmp = dir.join("tokens.json.tmp");
     std::fs::write(&tmp, body)?;
-    std::fs::rename(&tmp, dir.join("tokens.json"))?;
+    let path = dir.join("tokens.json");
+    std::fs::rename(&tmp, &path)?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o600))?;
+    }
     Ok(())
 }
 #[cfg(test)]
@@ -289,6 +301,27 @@ mod tests {
         let content = std::fs::read_to_string(tmp.path().join("tokens.json")).unwrap();
         let v: serde_json::Value = serde_json::from_str(&content).unwrap();
         assert_eq!(v["tokens"], serde_json::json!([]));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn tokens_file_and_dir_have_owner_only_permissions() {
+        use std::os::unix::fs::PermissionsExt;
+        let tmp = tempfile::tempdir().unwrap();
+        let dir = tmp.path().join("cfg");
+        let p = pairing(&dir);
+        let (code, _) = p.pairing_code();
+        let AuthOutcome::Paired { .. } = p.authenticate(Some(&code), None, "dev-1") else {
+            panic!("配对应成功")
+        };
+        let file_mode = std::fs::metadata(dir.join("tokens.json"))
+            .unwrap()
+            .permissions()
+            .mode()
+            & 0o777;
+        assert_eq!(file_mode, 0o600, "tokens.json 应为 0600");
+        let dir_mode = std::fs::metadata(&dir).unwrap().permissions().mode() & 0o777;
+        assert_eq!(dir_mode, 0o700, "配置目录应为 0700");
     }
 
     #[test]

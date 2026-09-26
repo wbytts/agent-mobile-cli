@@ -341,7 +341,7 @@ mod tests {
             android_version: "12".into(),
             capabilities: caps,
         };
-        let (id, _conn) = reg.register(&hello, tx);
+        let (id, _conn, _close) = reg.register(&hello, tx);
         let backend = AppBridgeBackend::new(Arc::clone(&reg));
         (reg, backend, id, rx)
     }
@@ -608,7 +608,7 @@ mod tests {
             android_version: "12".into(),
             capabilities: full_caps(),
         };
-        let (id, _conn) = reg.register(&hello, tx);
+        let (id, _conn, _close) = reg.register(&hello, tx);
         let backend = AppBridgeBackend::with_timeout(Arc::clone(&reg), Duration::from_millis(50));
         let err = backend.tap(&id, TapTarget::Coord(1, 2)).unwrap_err();
         assert_eq!(err.code, ErrorCode::Timeout);
@@ -618,7 +618,7 @@ mod tests {
     #[test]
     fn offline_or_unknown_device_errors() {
         let (reg, backend, id, _rx) = setup(full_caps());
-        let (_id, conn) = {
+        let (_id, conn, _close) = {
             // 重新注册拿代际再注销 → 离线
             let hello = Hello {
                 pairing_code: None,

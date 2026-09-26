@@ -124,9 +124,11 @@ async fn pair_info(State(state): State<AppState>) -> Json<Value> {
     }))
 }
 
-/// POST /pair-reset：重新生成配对码并清空全部已签发 token（design.md 决策 14）。
+/// POST /pair-reset：重新生成配对码、清空全部已签发 token 并断开活跃桥接连接
+///（spec「重置配对」：已连接设备被要求重新配对，design.md 决策 14）。
 async fn pair_reset(State(state): State<AppState>) -> Json<Value> {
     state.exec.pairing().reset();
+    state.exec.bridge().disconnect_all();
     Json(json!({ "ok": true }))
 }
 
@@ -315,6 +317,43 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn pair_reset_disconnects_registered_devices() {
+        // spec「重置配对」：已连接设备被要求重新配对（断开连接并标离线）
+        let tmp = tempfile::tempdir().unwrap();
+        let listener = TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("绑定随机端口");
+        let port = listener.local_addr().unwrap().port();
+        let shutdown = Arc::new(Notify::new());
+        let state = crate::exec::DaemonState::new_in(crate::config::Config::default(), tmp.path());
+        let handle = tokio::spawn(serve(listener, Arc::clone(&shutdown), Arc::clone(&state)));
+
+        let (tx, _rx) = tokio::sync::mpsc::unbounded_channel();
+        let hello = crate::bridge_proto::Hello {
+            pairing_code: None,
+            token: Some("t".into()),
+            device_name: "MuMu".into(),
+            android_version: "12".into(),
+            capabilities: vec![crate::bridge_proto::Capability::Tap],
+        };
+        state.bridge().register(&hello, tx);
+        assert_eq!(
+            state.bridge().device_records()[0].state,
+            crate::backend::DeviceState::Online
+        );
+
+        let raw = http_post(port, "/pair-reset", "{}").await;
+        assert!(raw.starts_with("HTTP/1.1 200"), "响应行: {raw}");
+        assert_eq!(
+            state.bridge().device_records()[0].state,
+            crate::backend::DeviceState::Offline,
+            "reset 后已连接设备应立即标离线"
+        );
+        shutdown.notify_one();
+        handle.await.expect("join").expect("http 服务退出");
+    }
+
+    #[tokio::test]
     async fn cmd_script_stdin_injected_and_routed_to_bridge() {
         let tmp = tempfile::tempdir().unwrap();
         let listener = TcpListener::bind("127.0.0.1:0")
@@ -334,7 +373,7 @@ mod tests {
             android_version: "12".into(),
             capabilities: vec![crate::bridge_proto::Capability::Script],
         };
-        let (_id, _conn) = state.bridge().register(&hello, tx);
+        let (_id, _conn, _close) = state.bridge().register(&hello, tx);
         let reg = Arc::clone(state.bridge());
         let dev = std::thread::spawn(move || {
             let frame = rx.blocking_recv().expect("应收到 script 帧");

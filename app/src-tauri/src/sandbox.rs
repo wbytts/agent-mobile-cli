@@ -4,8 +4,15 @@
 //! 脚本仅能通过显式注入的 `mobile.*` 全局对象触达设备能力。
 
 use std::sync::Arc;
+use std::time::{Duration, Instant};
 
 use rquickjs::{Ctx, Exception, Function, Object, Value};
+
+/// 默认脚本执行超时。daemon 心跳超时 30s（src/daemon/registry.rs）、App 心跳周期 25s，
+/// 25s 上限保证死循环脚本在 daemon 标离线前回传错误，命令循环不被永久卡住。
+pub const DEFAULT_TIMEOUT: Duration = Duration::from_secs(25);
+/// 默认脚本内存上限（64MB），防 OOM。
+pub const DEFAULT_MEMORY_LIMIT: usize = 64 * 1024 * 1024;
 
 /// 设备能力桥：生产实现经 Tauri 插件调到 Kotlin（Android），单测用 mock。
 ///
@@ -33,18 +40,34 @@ pub trait MobileOps: Send + Sync {
 /// QuickJS 沙盒执行器。
 pub struct Sandbox {
     ops: Arc<dyn MobileOps>,
+    timeout: Duration,
+    memory_limit: usize,
 }
 
 impl Sandbox {
     pub fn new(ops: Arc<dyn MobileOps>) -> Self {
-        Self { ops }
+        Self::with_limits(ops, DEFAULT_TIMEOUT, DEFAULT_MEMORY_LIMIT)
+    }
+
+    /// 自定义超时与内存上限（测试用；生产走 [`Sandbox::new`] 默认值）。
+    pub fn with_limits(ops: Arc<dyn MobileOps>, timeout: Duration, memory_limit: usize) -> Self {
+        Self {
+            ops,
+            timeout,
+            memory_limit,
+        }
     }
 
     /// 执行脚本并返回其结果（JSON 值）；脚本异常或 `mobile.*` 失败返回 Err。
+    /// 超时（默认 25s）与内存超限（默认 64MB）经 QuickJS interrupt handler / memory limit
+    /// 中断执行，返回结构化错误。
     pub fn run(&self, script: &str) -> Result<serde_json::Value, String> {
         // Runtime/Context 每脚本新建（design.md 决策 2）：脚本间无状态泄漏。
         let runtime =
             rquickjs::Runtime::new().map_err(|e| format!("创建 QuickJS Runtime 失败: {e}"))?;
+        runtime.set_memory_limit(self.memory_limit);
+        let deadline = Instant::now() + self.timeout;
+        runtime.set_interrupt_handler(Some(Box::new(move || Instant::now() >= deadline)));
         let context = rquickjs::Context::full(&runtime)
             .map_err(|e| format!("创建 QuickJS Context 失败: {e}"))?;
         context.with(|ctx| {
@@ -55,16 +78,33 @@ impl Sandbox {
                 Ok(v) => v,
                 Err(e) => {
                     let msg = script_error(&ctx, e);
-                    if msg.contains("return not in a function") {
+                    if msg.contains("return not in a function") && Instant::now() < deadline {
                         let wrapped = format!("(function(){{\n{script}\n}})()");
-                        ctx.eval(wrapped).map_err(|e2| script_error(&ctx, e2))?
+                        ctx.eval(wrapped)
+                            .map_err(|e2| self.map_eval_error(deadline, script_error(&ctx, e2)))?
                     } else {
-                        return Err(msg);
+                        return Err(self.map_eval_error(deadline, msg));
                     }
                 }
             };
             js_value_to_json(&ctx, value)
         })
+    }
+
+    /// eval 失败归类：超截止期限报超时；QuickJS 分配失败（out of memory）报内存超限；
+    /// 其余透传脚本异常消息。
+    fn map_eval_error(&self, deadline: Instant, msg: String) -> String {
+        if Instant::now() >= deadline {
+            return format!("脚本执行超时（{:?}）", self.timeout);
+        }
+        if msg.contains("out of memory") {
+            format!(
+                "脚本内存超限（上限 {} MB）",
+                self.memory_limit / (1024 * 1024)
+            )
+        } else {
+            msg
+        }
     }
 }
 
@@ -416,6 +456,50 @@ mod tests {
             )
             .expect("脚本应成功");
         assert_eq!(result, serde_json::json!(vec!["function"; 8]));
+    }
+
+    #[test]
+    fn infinite_loop_interrupted_by_timeout() {
+        let sandbox = Sandbox::with_limits(
+            Arc::new(MockOps::new()),
+            std::time::Duration::from_millis(500),
+            DEFAULT_MEMORY_LIMIT,
+        );
+        let start = std::time::Instant::now();
+        let err = sandbox.run("while(1){}").expect_err("死循环应被超时中断");
+        assert!(err.contains("脚本执行超时"), "错误应为结构化超时: {err}");
+        assert!(
+            start.elapsed() < std::time::Duration::from_secs(5),
+            "中断应在超时后立即返回"
+        );
+    }
+
+    #[test]
+    fn memory_hog_interrupted_by_limit() {
+        let sandbox = Sandbox::with_limits(
+            Arc::new(MockOps::new()),
+            std::time::Duration::from_secs(30),
+            8 * 1024 * 1024,
+        );
+        let err = sandbox
+            .run("var a=[]; for(let i=0;i<256;i++){ a.push(new ArrayBuffer(1024*1024)); }")
+            .expect_err("超上限分配应被内存限制拦截");
+        assert!(err.contains("内存"), "错误应为结构化内存超限: {err}");
+    }
+
+    #[test]
+    fn normal_script_unaffected_by_limits() {
+        let sandbox = Sandbox::with_limits(
+            Arc::new(MockOps::new()),
+            std::time::Duration::from_millis(500),
+            8 * 1024 * 1024,
+        );
+        assert_eq!(
+            sandbox
+                .run("var s=0; for(let i=0;i<1000;i++){s+=i;} s")
+                .unwrap(),
+            serde_json::json!(499500)
+        );
     }
 
     #[test]

@@ -80,6 +80,9 @@ $ADB -s 127.0.0.1:5555 shell monkey -p com.agentmobile.bridge 1
 `android-plugin` 的 manifest 声明了无障碍服务（构建期 manifest merger 自动并入主 manifest）：
 手势分发（tap/swipe）、窗口内容读取（uiTree，输出与 uiautomator dump 同构的 XML）、
 截图（API 30+ takeScreenshot）、文本注入（input）与全局动作（key）。
+uiTree 序列化深度上限为 64（MAX_TREE_DEPTH）：超深子节点不再静默丢弃，而是
+在其父节点下输出占位节点 `<node text="[truncated: depth>64]" class="bridge.Truncated" .../>`，
+便于排查深层界面 snapshot 缺节点问题。
 真机/模拟器验收前需开启服务：
 
 ```sh
@@ -170,3 +173,6 @@ $ADB -s 127.0.0.1:5555 shell settings put secure accessibility_enabled 1
   - 扫码页（zxing 取景框）在模拟器正常打开无崩溃；真机扫码留主会话验收
   - 冷启动闭环：`am force-stop` → `am start` 零操作，1 秒内 daemon 侧自动恢复 online；
     连接页回填持久化地址（地址持久化 roundtrip / 自动连接触发条件有 host 单测）
+  - 配对恢复（`pair --reset` 组合路径）：旧 token 被拒入「配对失败」态并清除已存 token，
+    输新配对码点连接即恢复 online（修复 token 优先抢占 hello 的死锁；回归单测
+    `hello_ack_reject_clears_stored_token_and_falls_back_to_code`）

@@ -1,3 +1,0 @@
-int string bridge_service_description 0x0
-int string bridge_service_label 0x0
-int xml bridge_accessibility_service_config 0x0
