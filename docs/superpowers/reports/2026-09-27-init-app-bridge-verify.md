@@ -57,7 +57,11 @@ OpenSpec 产物：`openspec validate init-app-bridge --strict` PASS；tasks 17/1
 ## 集成审查
 
 - Build 阶段 BridgeReview（f33a7a8 前全量 diff）：3 IMPORTANT + 7 MINOR → 全部修复（7945e31）
-- 修复轮补充审查 FixReview（7945e31 diff）：见下节结论
+- 修复轮补充审查 FixReview（7945e31 diff）：1 IMPORTANT——uiTree 截断占位节点零面积 bounds 被 CLI 简化树剔除，默认 snapshot 不可见 → 已修复（bounds [0,0][1,1]，占位可见且不入 @eN 引用；Kotlin 编译 + 全量回归绿）；其余 WS 绑定分层、踢旧、pending 清扫、Close 竞态、token 清除时机、沙盒限额、文件权限逐项核实正确（CLI 350 + App 36 测试全绿）。无 CRITICAL。
+
+## 偏差记录
+
+verify_failures: 1（FixReview IMPORTANT → verify-fail → 修复 → 复验通过）
 
 ## CRITICAL
 
@@ -69,4 +73,8 @@ OpenSpec 产物：`openspec validate init-app-bridge --strict` PASS；tasks 17/1
 
 ## SUGGESTION
 
-（待 FixReview 结论补充）
+1. 占位截断节点当前仅在深度 >64 时出现，MuMu 未构造 65 层 UI 实测渲染行（成本收益权衡：逻辑路径经代码审查与编译验证，渲染规则与既有节点一致）。如需完全闭环，后续可在自检页加深度测试布局。
+
+## 最终评估
+
+No critical issues found in the checks that ran. 1 WARNING（真机相机扫码）待用户验收决策；1 SUGGESTION。10/10 需求实现，19/20 场景实测通过，15/15 design 决策遵循。

@@ -1,6 +1,6 @@
 workflow: full
 language: zh-CN
-phase: build
+phase: verify
 context_compression: off
 build_mode: autonomous
 build_pause: null
@@ -13,7 +13,7 @@ auto_transition: true
 base_ref: 20b4422426ea4223f76ffc0b2d62b7d42cd196e1
 design_doc: docs/openspec/changes/init-app-bridge/design.md
 plan: docs/superpowers/plans/2026-09-26-init-app-bridge.md
-verify_result: fail
+verify_result: pending
 verify_failures: 1
 verification_report: docs/superpowers/reports/2026-09-27-init-app-bridge-verify.md
 branch_status: pending
@@ -28,4 +28,4 @@ handoff_hash: 9a5fc2aa1bd81fbf6669cc0d421278c1e2664487b00f45d1fe0d3915416f0e01
 classic_profile: full
 classic_migration: 1
 run_id: adc0da97-b40a-4851-9780-d1ab0e56906f
-check_epoch: 4
+check_epoch: 5
