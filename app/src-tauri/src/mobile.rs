@@ -28,6 +28,91 @@ mod imp {
         }
     }
 
+    /// BridgePlatform 的 Android 实现：设备信息、token SharedPreferences 存储、
+    /// 前台服务保活、扫码——全部经同一 PluginHandle 调到 Kotlin BridgePlugin。
+    pub struct AndroidBridgePlatform {
+        handle: PluginHandle<Wry>,
+    }
+
+    impl AndroidBridgePlatform {
+        pub fn new(handle: PluginHandle<Wry>) -> Self {
+            Self { handle }
+        }
+
+        fn call(&self, command: &str, payload: Value) -> Result<Value, String> {
+            self.handle
+                .run_mobile_plugin(command, payload)
+                .map_err(|e| e.to_string())
+        }
+
+        fn device_info_str(&self, key: &str) -> Option<String> {
+            self.call("deviceInfo", json!({})).ok().and_then(|v| {
+                v.get(key)
+                    .and_then(Value::as_str)
+                    .map(str::to_string)
+                    .filter(|s| !s.is_empty())
+            })
+        }
+    }
+
+    impl crate::bridge_client::BridgePlatform for AndroidBridgePlatform {
+        fn device_name(&self) -> String {
+            self.device_info_str("device_name")
+                .unwrap_or_else(|| "android".to_string())
+        }
+
+        fn android_version(&self) -> String {
+            self.device_info_str("android_version")
+                .unwrap_or_else(|| "unknown".to_string())
+        }
+
+        fn load_token(&self, host: &str, port: u16) -> Option<String> {
+            self.call("getBridgeToken", json!({ "host": host, "port": port }))
+                .ok()
+                .and_then(|v| {
+                    v.get("token")
+                        .and_then(Value::as_str)
+                        .map(str::to_string)
+                        .filter(|s| !s.is_empty())
+                })
+        }
+
+        fn save_token(&self, host: &str, port: u16, token: &str) {
+            let _ = self.call(
+                "setBridgeToken",
+                json!({ "host": host, "port": port, "token": token }),
+            );
+        }
+
+        fn set_foreground(&self, running: bool) {
+            let command = if running {
+                "startForegroundService"
+            } else {
+                "stopForegroundService"
+            };
+            let _ = self.call(command, json!({}));
+        }
+
+        fn load_address(&self) -> Option<(String, u16)> {
+            let v = self.call("getLastAddress", json!({})).ok()?;
+            let host = v.get("host").and_then(Value::as_str)?.to_string();
+            let port = v.get("port").and_then(Value::as_u64)? as u16;
+            (!host.is_empty() && port > 0).then_some((host, port))
+        }
+
+        fn save_address(&self, host: &str, port: u16) {
+            let _ = self.call("setLastAddress", json!({ "host": host, "port": port }));
+        }
+
+        fn scan_pair_qr(&self) -> Result<String, String> {
+            let v = self.call("scanPairQr", json!({}))?;
+            v.get("text")
+                .and_then(Value::as_str)
+                .map(str::to_string)
+                .filter(|s| !s.is_empty())
+                .ok_or_else(|| "扫码结果为空".to_string())
+        }
+    }
     impl MobileOps for AndroidMobileOps {
         fn tap(&self, x: f64, y: f64) -> Result<String, String> {
             self.call("tap", json!({ "x": x, "y": y }))
@@ -83,7 +168,6 @@ mod imp {
         }
     }
 }
-
 #[cfg(not(target_os = "android"))]
 mod imp {
     use super::*;
@@ -140,6 +224,37 @@ mod imp {
         fn open_a11y_settings(&self) -> Result<String, String> {
             Err(MSG.to_string())
         }
+    }
+
+    /// 非 Android 平台占位 BridgePlatform：连接不可用，仅保证 host 可编译。
+    pub struct UnsupportedBridgePlatform;
+
+    impl crate::bridge_client::BridgePlatform for UnsupportedBridgePlatform {
+        fn device_name(&self) -> String {
+            "host-device".to_string()
+        }
+
+        fn android_version(&self) -> String {
+            "unknown".to_string()
+        }
+
+        fn load_token(&self, _host: &str, _port: u16) -> Option<String> {
+            None
+        }
+
+        fn save_token(&self, _host: &str, _port: u16, _token: &str) {}
+
+        fn set_foreground(&self, _running: bool) {}
+
+        fn scan_pair_qr(&self) -> Result<String, String> {
+            Err("扫码仅 Android 平台可用".to_string())
+        }
+
+        fn load_address(&self) -> Option<(String, u16)> {
+            None
+        }
+
+        fn save_address(&self, _host: &str, _port: u16) {}
     }
 }
 

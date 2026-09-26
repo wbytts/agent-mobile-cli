@@ -1,4 +1,4 @@
-// Agent Mobile Bridge 诊断 UI（纯前端 mock，后续接 Rust 命令）
+// Agent Mobile Bridge 诊断 UI：连接/日志页经 Tauri 命令与事件接线（任务组 4）
 (function () {
   "use strict";
 
@@ -21,7 +21,24 @@
     });
   });
 
-  // ---------- 连接页（mock 状态机） ----------
+  var tauri = window.__TAURI__;
+  var invoke = tauri && tauri.core ? tauri.core.invoke : null;
+  var tauriEvent = tauri && tauri.event ? tauri.event : null;
+
+  // ---------- 日志页 ----------
+  var logList = document.getElementById("log-list");
+
+  function appendLog(level, message) {
+    var li = document.createElement("li");
+    var time = new Date().toLocaleTimeString();
+    li.innerHTML =
+      '<span class="log-time"></span><span class="log-level-' + level + '">[' + level + "]</span> ";
+    li.querySelector(".log-time").textContent = time;
+    li.appendChild(document.createTextNode(message));
+    logList.insertBefore(li, logList.firstChild);
+  }
+
+  // ---------- 连接页（真实连接状态机，经 bridge://state 事件推送） ----------
   var connBadge = document.getElementById("conn-badge");
   var connStateText = document.getElementById("conn-state-text");
   var deviceIdText = document.getElementById("device-id-text");
@@ -31,41 +48,128 @@
   var addrInput = document.getElementById("daemon-addr");
   var codeInput = document.getElementById("pair-code");
 
-  var connected = false;
+  var currentState = { state: "disconnected" };
 
   function renderConnState() {
-    connBadge.textContent = connected ? "已连接" : "未连接";
-    connBadge.className = "badge " + (connected ? "badge-connected" : "badge-disconnected");
-    connStateText.textContent = connected ? "已连接" : "未连接";
-    btnConnect.textContent = connected ? "断开" : "连接";
+    var s = currentState;
+    var connected = s.state === "connected";
+    var busy = connected || s.state === "connecting";
+    if (connected) {
+      connBadge.textContent = "已连接";
+      connBadge.className = "badge badge-connected";
+      connStateText.textContent = "已连接";
+      deviceIdText.textContent = s.device_id || "—";
+    } else if (s.state === "connecting") {
+      connBadge.textContent = "连接中";
+      connBadge.className = "badge badge-warn";
+      connStateText.textContent = "连接中…";
+      deviceIdText.textContent = "—";
+    } else if (s.state === "pairing") {
+      connBadge.textContent = "配对失败";
+      connBadge.className = "badge badge-warn";
+      connStateText.textContent = "配对失败：" + (s.reason || "未知原因");
+      deviceIdText.textContent = "—";
+    } else {
+      connBadge.textContent = "未连接";
+      connBadge.className = "badge badge-disconnected";
+      connStateText.textContent = "未连接";
+      deviceIdText.textContent = "—";
+      heartbeatText.textContent = "—";
+    }
+    btnConnect.textContent = busy ? "断开" : "连接";
   }
 
-  btnConnect.addEventListener("click", function () {
-    if (!connected && !addrInput.value.trim()) {
+  // 「host:port」或裸 host（默认端口 18777）
+  function parseAddr() {
+    var text = addrInput.value.trim();
+    if (!text) {
+      return null;
+    }
+    var idx = text.lastIndexOf(":");
+    if (idx > 0) {
+      var port = parseInt(text.slice(idx + 1), 10);
+      if (port > 0 && port <= 65535) {
+        return { host: text.slice(0, idx), port: port };
+      }
+    }
+    return { host: text, port: 18777 };
+  }
+
+  function startConnect() {
+    if (!invoke) {
+      appendLog("err", "非 Tauri 环境，无法连接");
+      return;
+    }
+    var addr = parseAddr();
+    if (!addr) {
       appendLog("err", "未填写 daemon 地址");
       addrInput.focus();
       return;
     }
-    // TODO(接线): 调用 Rust 命令 connect/disconnect，当前为 mock 切换
-    connected = !connected;
-    deviceIdText.textContent = connected ? "bridge:mumu-5554 (mock)" : "—";
-    heartbeatText.textContent = connected ? new Date().toLocaleTimeString() : "—";
-    appendLog(connected ? "ok" : "info",
-      connected ? "（mock）已连接 " + addrInput.value.trim() : "（mock）已断开");
-    renderConnState();
+    var code = codeInput.value.trim();
+    invoke("bridge_connect", {
+      host: addr.host,
+      port: addr.port,
+      pairingCode: code ? code : null,
+    }).catch(function (err) {
+      appendLog("err", "发起连接失败：" + err);
+    });
+  }
+
+  btnConnect.addEventListener("click", function () {
+    if (currentState.state === "connected" || currentState.state === "connecting") {
+      invoke("bridge_disconnect").catch(function (err) {
+        appendLog("err", "断开失败：" + err);
+      });
+      return;
+    }
+    startConnect();
   });
 
+  // 扫码配对：相机扫码 → 解析 agent-mobile://pair URI → 自动填入并连接
   btnScan.addEventListener("click", function () {
-    // TODO(接线): 相机扫码解析 agent-mobile://pair URI
-    appendLog("info", "扫码入口：待接线（相机 + ML Kit/zxing）");
-    btnScan.textContent = "扫码配对（待接线）";
+    if (!invoke) {
+      appendLog("err", "非 Tauri 环境，无法扫码");
+      return;
+    }
+    btnScan.disabled = true;
+    btnScan.textContent = "扫码中…";
+    invoke("bridge_scan_pair_qr")
+      .then(function (text) {
+        return invoke("bridge_parse_pair_uri", { uri: text });
+      })
+      .then(function (info) {
+        addrInput.value = info.host + ":" + info.port;
+        codeInput.value = info.code;
+        appendLog("ok", "扫码成功：" + info.host + ":" + info.port);
+        startConnect();
+      })
+      .catch(function (err) {
+        appendLog("err", "扫码配对失败：" + err);
+      })
+      .finally(function () {
+        btnScan.disabled = false;
+        btnScan.textContent = "扫码配对";
+      });
   });
+
+  // 连接状态 / 日志 / 心跳事件订阅
+  if (tauriEvent) {
+    tauriEvent.listen("bridge://state", function (e) {
+      currentState = e.payload;
+      renderConnState();
+    });
+    tauriEvent.listen("bridge://log", function (e) {
+      appendLog(e.payload.level, e.payload.message);
+    });
+    tauriEvent.listen("bridge://heartbeat", function () {
+      heartbeatText.textContent = new Date().toLocaleTimeString();
+    });
+  }
 
   // ---------- 能力自检页（真实插件调用） ----------
   var capResult = document.getElementById("cap-result");
   var a11yState = document.getElementById("a11y-state");
-  var tauri = window.__TAURI__;
-  var invoke = tauri && tauri.core ? tauri.core.invoke : null;
 
   function refreshA11yStatus() {
     if (!invoke) {
@@ -172,24 +276,34 @@
     }
   });
 
-  // ---------- 日志页 ----------
-  var logList = document.getElementById("log-list");
-
-  function appendLog(level, message) {
-    var li = document.createElement("li");
-    var time = new Date().toLocaleTimeString();
-    li.innerHTML =
-      '<span class="log-time"></span><span class="log-level-' + level + '">[' + level + "]</span> ";
-    li.querySelector(".log-time").textContent = time;
-    li.appendChild(document.createTextNode(message));
-    logList.insertBefore(li, logList.firstChild);
-  }
-
-  // mock 日志条目（连接/日志页接线在任务组 4）
-  appendLog("info", "App 启动（连接状态为 mock，待任务组 4 接线）");
-  appendLog("err", "连接 daemon 失败：ECONNREFUSED 192.168.1.10:18777（mock 示例）");
-  appendLog("ok", "心跳 ok，rtt=12ms（mock 示例）");
-
+  // ---------- 初始化 ----------
+  appendLog("info", "App 启动");
   renderConnState();
   refreshA11yStatus();
+  if (invoke) {
+    invoke("bridge_state")
+      .then(function (s) {
+        currentState = s;
+        renderConnState();
+      })
+      .catch(function () {});
+    // 回填上次成功连接的 daemon 地址（持久化于 SharedPreferences）
+    invoke("bridge_last_address")
+      .then(function (addr) {
+        if (addr && addr.host) {
+          addrInput.value = addr.host + ":" + addr.port;
+        }
+      })
+      .catch(function () {});
+    // 冷启动自动连接：有保存地址即自动发起（有 token 免配对）
+    invoke("bridge_auto_connect")
+      .then(function (triggered) {
+        if (triggered) {
+          appendLog("info", "检测到上次连接地址，自动连接中");
+        }
+      })
+      .catch(function (err) {
+        appendLog("err", "自动连接失败：" + err);
+      });
+  }
 })();

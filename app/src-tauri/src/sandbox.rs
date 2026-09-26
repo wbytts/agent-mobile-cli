@@ -49,7 +49,20 @@ impl Sandbox {
             .map_err(|e| format!("创建 QuickJS Context 失败: {e}"))?;
         context.with(|ctx| {
             register_mobile(&ctx, &self.ops)?;
-            let value: Value = ctx.eval(script).map_err(|e| script_error(&ctx, e))?;
+            // 先试 eval（最后表达式语义）；命中顶层 return 语法限制时按 IIFE 重试（return 语义），
+            // 两种脚本风格都可用——与 Node REPL 的回退策略一致。
+            let value: Value = match ctx.eval(script) {
+                Ok(v) => v,
+                Err(e) => {
+                    let msg = script_error(&ctx, e);
+                    if msg.contains("return not in a function") {
+                        let wrapped = format!("(function(){{\n{script}\n}})()");
+                        ctx.eval(wrapped).map_err(|e2| script_error(&ctx, e2))?
+                    } else {
+                        return Err(msg);
+                    }
+                }
+            };
             js_value_to_json(&ctx, value)
         })
     }
@@ -344,6 +357,11 @@ mod tests {
     fn script_return_value_roundtrip() {
         let sandbox = sandbox_with(Arc::new(MockOps::new()));
         assert_eq!(sandbox.run("1 + 2").unwrap(), serde_json::json!(3));
+        // 顶层 return 写法经 IIFE 回退同样可用
+        assert_eq!(
+            sandbox.run("const x = 41; return x + 1;").unwrap(),
+            serde_json::json!(42)
+        );
         assert_eq!(
             sandbox.run(r#"({a: 1, b: "x"})"#).unwrap(),
             serde_json::json!({"a": 1, "b": "x"})

@@ -23,6 +23,7 @@ import app.tauri.plugin.Invoke
 import app.tauri.plugin.JSObject
 import app.tauri.plugin.Plugin
 import org.json.JSONArray
+import org.json.JSONObject
 import java.io.ByteArrayOutputStream
 
 /**
@@ -376,6 +377,103 @@ class BridgePlugin(private val activity: Activity) : Plugin(activity) {
             invoke.reject("无法打开无障碍设置: ${e.message}")
         }
     }
+
+    // ---------- 组 4：设备信息 / token 存储 / 前台服务 / 扫码 ----------
+
+    /** 设备信息（hello 上报用）：Build.MODEL + Build.VERSION.RELEASE。 */
+    @Command
+    fun deviceInfo(invoke: Invoke) {
+        invoke.resolve(
+            JSObject()
+                .put("device_name", Build.MODEL ?: "android")
+                .put("android_version", Build.VERSION.RELEASE ?: "unknown"),
+        )
+    }
+
+    /** 读取已配对 token（SharedPreferences 私有存储，键 `token:<host>:<port>`）。 */
+    @Command
+    fun getBridgeToken(invoke: Invoke) {
+        val args = invoke.getArgs()
+        val key = tokenKey(args.getString("host"), args.getInt("port"))
+        val token = prefs().getString(key, null)
+        invoke.resolve(JSObject().put("token", token))
+    }
+
+    /** 持久化配对成功签发的 token。 */
+    @Command
+    fun setBridgeToken(invoke: Invoke) {
+        val args = invoke.getArgs()
+        val key = tokenKey(args.getString("host"), args.getInt("port"))
+        prefs().edit().putString(key, args.getString("token")).apply()
+        invoke.resolve()
+    }
+
+    /** 读取上次成功连接的 daemon 地址（冷启动自动连接 + 连接页回填）。 */
+    @Command
+    fun getLastAddress(invoke: Invoke) {
+        val host = prefs().getString("last_host", null)
+        val port = prefs().getInt("last_port", 0)
+        if (host.isNullOrEmpty() || port <= 0) {
+            invoke.resolve(JSObject().put("host", JSONObject.NULL).put("port", 0))
+        } else {
+            invoke.resolve(JSObject().put("host", host).put("port", port))
+        }
+    }
+
+    /** 持久化上次成功连接的 daemon 地址（仅连接成功后由 Rust 调用）。 */
+    @Command
+    fun setLastAddress(invoke: Invoke) {
+        val args = invoke.getArgs()
+        prefs().edit()
+            .putString("last_host", args.getString("host"))
+            .putInt("last_port", args.getInt("port"))
+            .apply()
+        invoke.resolve()
+    }
+
+    /** 启动前台服务保活（常驻通知「Agent Mobile Bridge 运行中」）。 */
+    @Command
+    fun startForegroundService(invoke: Invoke) {
+        try {
+            BridgeForegroundService.start(activity)
+            invoke.resolve()
+        } catch (e: Exception) {
+            invoke.reject("前台服务启动失败: ${e.message}")
+        }
+    }
+
+    @Command
+    fun stopForegroundService(invoke: Invoke) {
+        BridgeForegroundService.stop(activity)
+        invoke.resolve()
+    }
+
+    /** 打开扫码页扫描配对二维码，回传扫描内容文本。 */
+    @Command
+    fun scanPairQr(invoke: Invoke) {
+        val started = ScanActivity.beginScan { text ->
+            if (text == null) {
+                invoke.reject("扫码取消或相机权限被拒绝")
+            } else {
+                invoke.resolve(JSObject().put("text", text))
+            }
+        }
+        if (!started) {
+            invoke.reject("已有扫码进行中")
+            return
+        }
+        try {
+            activity.startActivity(Intent(activity, ScanActivity::class.java))
+        } catch (e: Exception) {
+            ScanActivity.cancelScan()
+            invoke.reject("无法打开扫码页: ${e.message}")
+        }
+    }
+
+    private fun prefs() =
+        activity.getSharedPreferences("agent_mobile_bridge", Context.MODE_PRIVATE)
+
+    private fun tokenKey(host: String, port: Int) = "token:$host:$port"
 
     companion object {
         private const val TAP_DURATION_MS = 80L

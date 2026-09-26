@@ -13,10 +13,10 @@
 
 ## 3. Kotlin 原生能力
 
-- [ ] 3.1 实现 AccessibilityService 与 Tauri 插件绑定（点击/滑动/UI 树读取），验证 MuMu 上经插件点击设置项生效 <!-- comet-task:545bd128-daa9-419b-b1f5-dcf22cc03965 -->
-- [ ] 3.2 实现截图能力（takeScreenshot）并经插件回传，验证返回非空 PNG 数据 <!-- comet-task:40e47a10-0bd3-4527-a23c-052347446c7f -->
-- [ ] 3.3 集成 QuickJS 沙盒插件并绑定 `mobile.*` API（tap/swipe/uiTree/screenshot），验证脚本执行返回结果且无法访问沙盒外资源 <!-- comet-task:ba80be11-91c1-434f-b3ed-1a43a25e9e46 -->
-- [ ] 3.4 实现无障碍权限状态检测与开启引导（跳转系统设置），验证未授权时引导展示、授权后状态更新 <!-- comet-task:2a32ec5a-deb6-44e6-b589-b8cc6c589273 -->
+- [x] 3.1 实现 AccessibilityService 与 Tauri 插件绑定（点击/滑动/UI 树读取），验证 MuMu 上经插件点击设置项生效 <!-- comet-task:545bd128-daa9-419b-b1f5-dcf22cc03965 -->
+- [x] 3.2 实现截图能力（takeScreenshot）并经插件回传，验证返回非空 PNG 数据 <!-- comet-task:40e47a10-0bd3-4527-a23c-052347446c7f -->
+- [x] 3.3 集成 QuickJS 沙盒插件并绑定 `mobile.*` API（tap/swipe/uiTree/screenshot），验证脚本执行返回结果且无法访问沙盒外资源 <!-- comet-task:ba80be11-91c1-434f-b3ed-1a43a25e9e46 -->
+- [x] 3.4 实现无障碍权限状态检测与开启引导（跳转系统设置），验证未授权时引导展示、授权后状态更新 <!-- comet-task:2a32ec5a-deb6-44e6-b589-b8cc6c589273 -->
 
 ## 4. App 内 WS 客户端
 
@@ -26,10 +26,10 @@
 
 ## 5. CLI 桥接后端
 
-- [ ] 5.1 实现 `app-bridge` 后端的统一接口（snapshot/tap/swipe/input/screenshot 经 WS 路由），验证对桥接设备执行命令输出结构与 ADB 后端一致 <!-- comet-task:ec4dc356-aefc-4499-8ce7-230b7a487b3d -->
-- [ ] 5.2 实现能力集校验与降级错误，验证对桥接设备执行 shell 返回「不支持」结构化错误 <!-- comet-task:d7b70f80-52cc-4ebf-8672-538918c5f211 -->
-- [ ] 5.3 实现 devices 合并枚举（adb + 桥接设备类型标识），验证两类设备同时在线时均可列出并区分 <!-- comet-task:41c1207f-f863-4d14-aea2-7f6f6dd9b8cf -->
-- [ ] 5.4 实现 CLI script 命令（`agent-mobile-cli script <file.js|-> --device <id>`：文件或 stdin 读 JS 源码，经桥接下发 script 消息，输出脚本返回值或异常），验证对桥接设备执行 `mobile.tap` 脚本输出与协议一致 <!-- comet-task:ea47e93b-5534-41a6-9fbf-e4c5f5bb0766 -->
+- [x] 5.1 实现 `app-bridge` 后端的统一接口（snapshot/tap/swipe/input/screenshot 经 WS 路由），验证对桥接设备执行命令输出结构与 ADB 后端一致 <!-- comet-task:ec4dc356-aefc-4499-8ce7-230b7a487b3d -->
+- [x] 5.2 实现能力集校验与降级错误，验证对桥接设备执行 shell 返回「不支持」结构化错误 <!-- comet-task:d7b70f80-52cc-4ebf-8672-538918c5f211 -->
+- [x] 5.3 实现 devices 合并枚举（adb + 桥接设备类型标识），验证两类设备同时在线时均可列出并区分 <!-- comet-task:41c1207f-f863-4d14-aea2-7f6f6dd9b8cf -->
+- [x] 5.4 实现 CLI script 命令（`agent-mobile-cli script <file.js|-> --device <id>`：文件或 stdin 读 JS 源码，经桥接下发 script 消息，输出脚本返回值或异常），验证对桥接设备执行 `mobile.tap` 脚本输出与协议一致 <!-- comet-task:ea47e93b-5534-41a6-9fbf-e4c5f5bb0766 -->
 
 ## 6. 端到端验收
 

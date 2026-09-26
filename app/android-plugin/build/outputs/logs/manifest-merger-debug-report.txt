@@ -1,47 +1,85 @@
 -- Merging decision tree log ---
 manifest
-ADDED from /Users/wby/codes/github/agent-mobile-cli/app/android-plugin/src/main/AndroidManifest.xml:2:1-26:12
-INJECTED from /Users/wby/codes/github/agent-mobile-cli/app/android-plugin/src/main/AndroidManifest.xml:2:1-26:12
+ADDED from /Users/wby/codes/github/agent-mobile-cli/app/android-plugin/src/main/AndroidManifest.xml:2:1-47:12
+INJECTED from /Users/wby/codes/github/agent-mobile-cli/app/android-plugin/src/main/AndroidManifest.xml:2:1-47:12
 	package
 		INJECTED from /Users/wby/codes/github/agent-mobile-cli/app/android-plugin/src/main/AndroidManifest.xml
 	xmlns:android
 		ADDED from /Users/wby/codes/github/agent-mobile-cli/app/android-plugin/src/main/AndroidManifest.xml:2:11-69
+uses-permission#android.permission.INTERNET
+ADDED from /Users/wby/codes/github/agent-mobile-cli/app/android-plugin/src/main/AndroidManifest.xml:4:5-67
+	android:name
+		ADDED from /Users/wby/codes/github/agent-mobile-cli/app/android-plugin/src/main/AndroidManifest.xml:4:22-64
+uses-permission#android.permission.CAMERA
+ADDED from /Users/wby/codes/github/agent-mobile-cli/app/android-plugin/src/main/AndroidManifest.xml:6:5-65
+	android:name
+		ADDED from /Users/wby/codes/github/agent-mobile-cli/app/android-plugin/src/main/AndroidManifest.xml:6:22-62
+uses-permission#android.permission.FOREGROUND_SERVICE
+ADDED from /Users/wby/codes/github/agent-mobile-cli/app/android-plugin/src/main/AndroidManifest.xml:8:5-77
+	android:name
+		ADDED from /Users/wby/codes/github/agent-mobile-cli/app/android-plugin/src/main/AndroidManifest.xml:8:22-74
+uses-permission#android.permission.FOREGROUND_SERVICE_DATA_SYNC
+ADDED from /Users/wby/codes/github/agent-mobile-cli/app/android-plugin/src/main/AndroidManifest.xml:9:5-87
+	android:name
+		ADDED from /Users/wby/codes/github/agent-mobile-cli/app/android-plugin/src/main/AndroidManifest.xml:9:22-84
+uses-permission#android.permission.POST_NOTIFICATIONS
+ADDED from /Users/wby/codes/github/agent-mobile-cli/app/android-plugin/src/main/AndroidManifest.xml:11:5-77
+	android:name
+		ADDED from /Users/wby/codes/github/agent-mobile-cli/app/android-plugin/src/main/AndroidManifest.xml:11:22-74
 queries
-ADDED from /Users/wby/codes/github/agent-mobile-cli/app/android-plugin/src/main/AndroidManifest.xml:5:5-10:15
+ADDED from /Users/wby/codes/github/agent-mobile-cli/app/android-plugin/src/main/AndroidManifest.xml:13:5-18:15
 intent#action:name:android.intent.action.MAIN+category:name:android.intent.category.LAUNCHER
-ADDED from /Users/wby/codes/github/agent-mobile-cli/app/android-plugin/src/main/AndroidManifest.xml:6:9-9:18
+ADDED from /Users/wby/codes/github/agent-mobile-cli/app/android-plugin/src/main/AndroidManifest.xml:14:9-17:18
 action#android.intent.action.MAIN
-ADDED from /Users/wby/codes/github/agent-mobile-cli/app/android-plugin/src/main/AndroidManifest.xml:7:13-65
+ADDED from /Users/wby/codes/github/agent-mobile-cli/app/android-plugin/src/main/AndroidManifest.xml:15:13-65
 	android:name
-		ADDED from /Users/wby/codes/github/agent-mobile-cli/app/android-plugin/src/main/AndroidManifest.xml:7:21-62
+		ADDED from /Users/wby/codes/github/agent-mobile-cli/app/android-plugin/src/main/AndroidManifest.xml:15:21-62
 category#android.intent.category.LAUNCHER
-ADDED from /Users/wby/codes/github/agent-mobile-cli/app/android-plugin/src/main/AndroidManifest.xml:8:13-73
+ADDED from /Users/wby/codes/github/agent-mobile-cli/app/android-plugin/src/main/AndroidManifest.xml:16:13-73
 	android:name
-		ADDED from /Users/wby/codes/github/agent-mobile-cli/app/android-plugin/src/main/AndroidManifest.xml:8:23-70
+		ADDED from /Users/wby/codes/github/agent-mobile-cli/app/android-plugin/src/main/AndroidManifest.xml:16:23-70
 application
-ADDED from /Users/wby/codes/github/agent-mobile-cli/app/android-plugin/src/main/AndroidManifest.xml:12:5-25:19
+ADDED from /Users/wby/codes/github/agent-mobile-cli/app/android-plugin/src/main/AndroidManifest.xml:20:5-46:19
 service#com.agentmobile.bridge.BridgeAccessibilityService
-ADDED from /Users/wby/codes/github/agent-mobile-cli/app/android-plugin/src/main/AndroidManifest.xml:13:9-24:19
+ADDED from /Users/wby/codes/github/agent-mobile-cli/app/android-plugin/src/main/AndroidManifest.xml:21:9-32:19
 	android:label
-		ADDED from /Users/wby/codes/github/agent-mobile-cli/app/android-plugin/src/main/AndroidManifest.xml:15:13-57
+		ADDED from /Users/wby/codes/github/agent-mobile-cli/app/android-plugin/src/main/AndroidManifest.xml:23:13-57
 	android:exported
-		ADDED from /Users/wby/codes/github/agent-mobile-cli/app/android-plugin/src/main/AndroidManifest.xml:16:13-36
+		ADDED from /Users/wby/codes/github/agent-mobile-cli/app/android-plugin/src/main/AndroidManifest.xml:24:13-36
 	android:permission
-		ADDED from /Users/wby/codes/github/agent-mobile-cli/app/android-plugin/src/main/AndroidManifest.xml:17:13-79
+		ADDED from /Users/wby/codes/github/agent-mobile-cli/app/android-plugin/src/main/AndroidManifest.xml:25:13-79
 	android:name
-		ADDED from /Users/wby/codes/github/agent-mobile-cli/app/android-plugin/src/main/AndroidManifest.xml:14:13-55
+		ADDED from /Users/wby/codes/github/agent-mobile-cli/app/android-plugin/src/main/AndroidManifest.xml:22:13-55
 intent-filter#action:name:android.accessibilityservice.AccessibilityService
-ADDED from /Users/wby/codes/github/agent-mobile-cli/app/android-plugin/src/main/AndroidManifest.xml:18:13-20:29
+ADDED from /Users/wby/codes/github/agent-mobile-cli/app/android-plugin/src/main/AndroidManifest.xml:26:13-28:29
 action#android.accessibilityservice.AccessibilityService
-ADDED from /Users/wby/codes/github/agent-mobile-cli/app/android-plugin/src/main/AndroidManifest.xml:19:17-92
+ADDED from /Users/wby/codes/github/agent-mobile-cli/app/android-plugin/src/main/AndroidManifest.xml:27:17-92
 	android:name
-		ADDED from /Users/wby/codes/github/agent-mobile-cli/app/android-plugin/src/main/AndroidManifest.xml:19:25-89
+		ADDED from /Users/wby/codes/github/agent-mobile-cli/app/android-plugin/src/main/AndroidManifest.xml:27:25-89
 meta-data#android.accessibilityservice
-ADDED from /Users/wby/codes/github/agent-mobile-cli/app/android-plugin/src/main/AndroidManifest.xml:21:13-23:79
+ADDED from /Users/wby/codes/github/agent-mobile-cli/app/android-plugin/src/main/AndroidManifest.xml:29:13-31:79
 	android:resource
-		ADDED from /Users/wby/codes/github/agent-mobile-cli/app/android-plugin/src/main/AndroidManifest.xml:23:17-76
+		ADDED from /Users/wby/codes/github/agent-mobile-cli/app/android-plugin/src/main/AndroidManifest.xml:31:17-76
 	android:name
-		ADDED from /Users/wby/codes/github/agent-mobile-cli/app/android-plugin/src/main/AndroidManifest.xml:22:17-60
+		ADDED from /Users/wby/codes/github/agent-mobile-cli/app/android-plugin/src/main/AndroidManifest.xml:30:17-60
+service#com.agentmobile.bridge.BridgeForegroundService
+ADDED from /Users/wby/codes/github/agent-mobile-cli/app/android-plugin/src/main/AndroidManifest.xml:35:9-38:56
+	android:exported
+		ADDED from /Users/wby/codes/github/agent-mobile-cli/app/android-plugin/src/main/AndroidManifest.xml:37:13-37
+	android:foregroundServiceType
+		ADDED from /Users/wby/codes/github/agent-mobile-cli/app/android-plugin/src/main/AndroidManifest.xml:38:13-53
+	android:name
+		ADDED from /Users/wby/codes/github/agent-mobile-cli/app/android-plugin/src/main/AndroidManifest.xml:36:13-52
+activity#com.agentmobile.bridge.ScanActivity
+ADDED from /Users/wby/codes/github/agent-mobile-cli/app/android-plugin/src/main/AndroidManifest.xml:41:9-45:74
+	android:screenOrientation
+		ADDED from /Users/wby/codes/github/agent-mobile-cli/app/android-plugin/src/main/AndroidManifest.xml:44:13-49
+	android:exported
+		ADDED from /Users/wby/codes/github/agent-mobile-cli/app/android-plugin/src/main/AndroidManifest.xml:43:13-37
+	android:theme
+		ADDED from /Users/wby/codes/github/agent-mobile-cli/app/android-plugin/src/main/AndroidManifest.xml:45:13-71
+	android:name
+		ADDED from /Users/wby/codes/github/agent-mobile-cli/app/android-plugin/src/main/AndroidManifest.xml:42:13-41
 uses-sdk
 INJECTED from /Users/wby/codes/github/agent-mobile-cli/app/android-plugin/src/main/AndroidManifest.xml reason: use-sdk injection requested
 INJECTED from /Users/wby/codes/github/agent-mobile-cli/app/android-plugin/src/main/AndroidManifest.xml

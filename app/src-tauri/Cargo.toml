@@ -21,6 +21,10 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 rquickjs = "0.12"
 parking_lot = "0.12"
+url = "2"
+futures-util = "0.3"
+tokio = { version = "1", features = ["macros", "time", "net", "sync"] }
+tokio-tungstenite = { version = "0.24", default-features = false, features = ["connect"] }
 
 [target.'cfg(target_os = "android")'.dependencies]
 android_logger = "0.14"
