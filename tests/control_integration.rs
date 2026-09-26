@@ -61,6 +61,35 @@ fn snapshot_returns_tree_with_refs() {
 
 #[test]
 #[ignore = "需要真实 adb 与在线设备"]
+fn concurrent_snapshots_both_succeed() {
+    // 并发安全回归：两个线程对同设备并发 snapshot，
+    // 各自使用唯一临时文件（NamedTempFile），均应成功且树非空。
+    let Some(target) = target_device() else {
+        eprintln!("跳过：未设置 AGENT_MOBILE_TEST_DEVICE");
+        return;
+    };
+    let _guard = DEVICE_LOCK.lock();
+    let backend = locate_backend();
+
+    std::thread::scope(|s| {
+        let handles: Vec<_> = (0..2)
+            .map(|_| {
+                s.spawn(|| {
+                    backend
+                        .snapshot(&target, false)
+                        .unwrap_or_else(|e| panic!("并发 snapshot 应成功: {}", e.message))
+                })
+            })
+            .collect();
+        for h in handles {
+            let snap = h.join().expect("snapshot 线程不应 panic");
+            assert!(!snap.tree.is_empty(), "并发快照简化树应非空");
+        }
+    });
+}
+
+#[test]
+#[ignore = "需要真实 adb 与在线设备"]
 fn tap_coord_changes_ui() {
     let Some(target) = target_device() else {
         eprintln!("跳过：未设置 AGENT_MOBILE_TEST_DEVICE");
@@ -224,11 +253,14 @@ fn logcat_respects_line_limit() {
         .logcat(&target, 20, None, None)
         .unwrap_or_else(|e| panic!("logcat 应成功: {}", e.message));
     assert!(!text.trim().is_empty(), "logcat 输出应非空");
-    // -t 20 按缓冲区各取 20 行并附加少量 "beginning of" 头，放宽上限校验数量级。
+    // 硬契约：输出行数严格 ≤ 请求行数（backend 已去缓冲区块头并截取末尾 N 行）。
     let lines = text.lines().count();
+    assert!(lines <= 20, "logcat 行数 {lines} 应严格 ≤ 20");
     assert!(
-        lines <= 70,
-        "logcat 行数 {lines} 应受 -t 20 限制（含缓冲区块头）"
+        !text
+            .lines()
+            .any(|l| l.starts_with("--------- beginning of")),
+        "logcat 输出不应含缓冲区块头"
     );
 }
 

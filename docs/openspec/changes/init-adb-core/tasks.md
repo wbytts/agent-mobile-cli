@@ -23,14 +23,14 @@
 
 ## 4. 设备控制命令
 
-- [ ] 4.1 实现 `snapshot`（uiautomator dump 拉取解析 + 简化树 + `@eN` 引用表），验证 MuMu 系统设置页快照含带坐标区域的元素引用 <!-- comet-task:8e1074c3-e5d7-412c-a3d6-4cf3db1f5407 -->
-- [ ] 4.2 实现 `tap`/`swipe`（坐标与元素引用两种寻址），验证点击设置项后界面实际跳转 <!-- comet-task:d694d982-c500-4692-bbd5-c72b7796bb1a -->
-- [ ] 4.3 实现 `input` 文本输入与 `key` 按键事件，验证输入框出现目标文本 <!-- comet-task:eea065a5-e566-43bb-bc82-1eb883a430f6 -->
-- [ ] 4.4 实现 `screenshot`（PNG 保存，支持输出路径），验证文件非空且可打开、内容与屏幕一致 <!-- comet-task:38910be9-474a-4096-92f4-f6754534e220 -->
-- [ ] 4.5 实现 `apps` 列表（可过滤）与 `launch`/`stop`，验证启动系统设置后前台切换 <!-- comet-task:c39d64c0-29ae-45b8-8fa0-42c28d1cc46d -->
-- [ ] 4.6 实现 `logcat`（最近 N 行 + tag/级别过滤），验证输出行数不超过指定值 <!-- comet-task:abde685c-fc82-42b8-92ba-cb12ac9622ad -->
-- [ ] 4.7 实现 `shell` 透传（返回 stdout/stderr/退出码），验证 `getprop ro.product.model` 返回设备型号 <!-- comet-task:703fbaef-5f87-4714-8e74-5cea36654033 -->
-- [ ] 4.8 实现设备离线与操作超时的结构化错误，验证断开模拟器后命令以 device offline 错误结束且不挂起 <!-- comet-task:5be39b82-14a3-4d5d-99d4-61b2aeceb3b8 -->
+- [x] 4.1 实现 `snapshot`（uiautomator dump 拉取解析 + 简化树 + `@eN` 引用表），验证 MuMu 系统设置页快照含带坐标区域的元素引用 <!-- comet-task:8e1074c3-e5d7-412c-a3d6-4cf3db1f5407 -->
+- [x] 4.2 实现 `tap`/`swipe`（坐标与元素引用两种寻址），验证点击设置项后界面实际跳转 <!-- comet-task:d694d982-c500-4692-bbd5-c72b7796bb1a -->
+- [x] 4.3 实现 `input` 文本输入与 `key` 按键事件，验证输入框出现目标文本 <!-- comet-task:eea065a5-e566-43bb-bc82-1eb883a430f6 -->
+- [x] 4.4 实现 `screenshot`（PNG 保存，支持输出路径），验证文件非空且可打开、内容与屏幕一致 <!-- comet-task:38910be9-474a-4096-92f4-f6754534e220 -->
+- [x] 4.5 实现 `apps` 列表（可过滤）与 `launch`/`stop`，验证启动系统设置后前台切换 <!-- comet-task:c39d64c0-29ae-45b8-8fa0-42c28d1cc46d -->
+- [x] 4.6 实现 `logcat`（最近 N 行 + tag/级别过滤），验证输出行数不超过指定值 <!-- comet-task:abde685c-fc82-42b8-92ba-cb12ac9622ad -->
+- [x] 4.7 实现 `shell` 透传（返回 stdout/stderr/退出码），验证 `getprop ro.product.model` 返回设备型号 <!-- comet-task:703fbaef-5f87-4714-8e74-5cea36654033 -->
+- [x] 4.8 实现设备离线与操作超时的结构化错误，验证断开模拟器后命令以 device offline 错误结束且不挂起 <!-- comet-task:5be39b82-14a3-4d5d-99d4-61b2aeceb3b8 -->
 
 ## 5. 分发与 Agent 文档
 

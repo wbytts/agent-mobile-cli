@@ -58,15 +58,25 @@ struct CmdRequest {
 }
 
 async fn cmd(State(state): State<AppState>, Json(req): Json<CmdRequest>) -> Json<Value> {
-    if let Some(cwd) = req.cwd {
-        state.exec.set_cwd(cwd.into());
-    }
     let argv: Vec<String> = std::iter::once("agent-mobile-cli".to_string())
         .chain(req.args)
         .collect();
+    // 命令发起侧 CLI 的工作目录（相对路径输出以其为基准）；缺省为 daemon 当前目录
+    let cwd = std::path::PathBuf::from(req.cwd.unwrap_or_else(|| ".".to_string()));
     let parsed = <crate::cli::Cli as clap::Parser>::try_parse_from(argv);
     let out = match parsed {
-        Ok(cli) => state.exec.execute(&cli.command),
+        Ok(cli) => {
+            // execute 为同步阻塞调用（ADB 进程/IO），移入 blocking 线程池避免卡住 worker
+            let exec = Arc::clone(&state.exec);
+            match tokio::task::spawn_blocking(move || exec.execute(&cli.command, &cwd)).await {
+                Ok(out) => out,
+                Err(e) => crate::output::Output::failure(
+                    crate::output::ErrorCode::IoError,
+                    format!("命令执行线程异常退出: {e}"),
+                    None,
+                ),
+            }
+        }
         Err(e) => crate::output::Output::failure(
             crate::output::ErrorCode::Usage,
             e.to_string().trim().to_string(),

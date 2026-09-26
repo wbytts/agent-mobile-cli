@@ -1,0 +1,17 @@
+{
+  "name": "agent-mobile-cli",
+  "version": "0.1.0",
+  "description": "面向 Agent 的 Android 设备感知与控制 CLI（ADB 直连 + 调试 App 桥接）",
+  "license": "MIT",
+  "bin": {
+    "agent-mobile-cli": "bin/agent-mobile-cli.js"
+  },
+  "files": [
+    "bin",
+    "vendor",
+    "postinstall.js"
+  ],
+  "scripts": {
+    "postinstall": "node postinstall.js"
+  }
+}

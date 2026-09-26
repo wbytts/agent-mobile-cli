@@ -1,5 +1,4 @@
 //! ADB 直连后端：实现 Backend trait，预留 app-bridge 路由（design.md 决策 10）。
-// TODO(接线): CLI/daemon 命令接线后移除本行（参考 ui.rs 约定，避免组 2-4 接线前 dead_code 警告）。
 use super::{resolve_target, BResult, Backend, BackendKind, DeviceRecord, ShellResult, TapTarget};
 use crate::adb::Adb;
 use crate::config::Config;
@@ -43,8 +42,16 @@ impl AdbBackend {
     }
 }
 
-/// uiautomator dump 的设备端输出路径（design.md 决策 4）。
-const UI_DUMP_REMOTE: &str = "/sdcard/am_ui.xml";
+/// uiautomator dump 的设备端输出路径前缀（design.md 决策 4）；
+/// 每次 snapshot 追加 pid+序号后缀保证并发唯一。
+const UI_DUMP_REMOTE_PREFIX: &str = "/sdcard/am_ui";
+
+/// snapshot 临时文件名的进程内唯一序号（配合 pid 保证并发/跨进程唯一）。
+static SNAPSHOT_TMP_SEQ: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
+/// uiautomator dump 临界区锁：同一设备不支持并发 dump（实测并发时一方静默失败），
+/// 进程内串行化 dump → pull → 读取 序列，保证并发 snapshot 均成功。
+static SNAPSHOT_DUMP_LOCK: parking_lot::Mutex<()> = parking_lot::Mutex::new(());
 
 /// 转义 input text 载荷（纯函数，design.md 决策 5）：
 /// 仅 ASCII；空格 → %s；字面 % → %25（input 自身的转义体系）；
@@ -115,6 +122,26 @@ fn validate_package(package: &str) -> BResult<()> {
     }
 }
 
+/// 裁剪 logcat 输出（纯函数）：去掉 `--------- beginning of` 缓冲区块头，
+/// 截取末尾 N 行（保留原始顺序），使输出行数 ≤ lines 成为硬契约
+/// （device-control spec：输出不超过 50 行）。
+fn trim_logcat(text: &str, lines: u32) -> String {
+    let limit = lines as usize;
+    if limit == 0 {
+        return String::new();
+    }
+    let kept: Vec<&str> = text
+        .lines()
+        .filter(|l| !l.starts_with("--------- beginning of"))
+        .collect();
+    let start = kept.len().saturating_sub(limit);
+    let mut out = kept[start..].join("\n");
+    if !out.is_empty() {
+        out.push('\n');
+    }
+    out
+}
+
 impl Backend for AdbBackend {
     fn kind(&self) -> BackendKind {
         BackendKind::Adb
@@ -132,9 +159,15 @@ impl Backend for AdbBackend {
     /// full=true 时 tree 直接放原始 XML 文本、refs 为空（ui.rs 的 Snapshot 无 raw_xml
     /// 字段，取最简方案；调用方需要完整结构时以 tree 为原始 XML 处理）。
     fn snapshot(&self, device: &str, full: bool) -> BResult<crate::ui::Snapshot> {
+        // 并发安全：进程内以 SNAPSHOT_DUMP_LOCK 串行化 dump 临界区（同设备并发 dump 必失败），
+        // 设备端与本地临时路径另带 pid + 原子计数后缀，防跨进程/同路径覆盖
+        // （tempfile 仅为 dev-dependency，生产代码不可用）。
+        let seq = SNAPSHOT_TMP_SEQ.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        let _dump_guard = SNAPSHOT_DUMP_LOCK.lock();
+        let remote = format!("{UI_DUMP_REMOTE_PREFIX}-{}-{seq}.xml", std::process::id());
         let dump = self.adb.shell(
             device,
-            &format!("uiautomator dump {UI_DUMP_REMOTE}"),
+            &format!("uiautomator dump {remote}"),
             crate::adb::TRANSFER_TIMEOUT,
         )?;
         if dump.exit_code != 0 {
@@ -148,13 +181,13 @@ impl Backend for AdbBackend {
             ));
         }
         let tmp = std::env::temp_dir().join(format!(
-            "agent-mobile-ui-{}-{}.xml",
+            "agent-mobile-ui-{}-{}-{seq}.xml",
             std::process::id(),
             device.replace([':', '/', '\\'], "_")
         ));
         let result = (|| {
             self.adb
-                .pull(device, UI_DUMP_REMOTE, &tmp, crate::adb::TRANSFER_TIMEOUT)?;
+                .pull(device, &remote, &tmp, crate::adb::TRANSFER_TIMEOUT)?;
             let xml = std::fs::read_to_string(&tmp)
                 .map_err(|e| ErrorBody::io_error(format!("读取快照临时文件失败: {e}")))?;
             if full {
@@ -172,6 +205,12 @@ impl Backend for AdbBackend {
             }
         })();
         let _ = std::fs::remove_file(&tmp);
+        // 设备端临时 dump 文件清理（失败不影响结果）。
+        let _ = self.adb.shell(
+            device,
+            &format!("rm -f {remote}"),
+            crate::adb::DEFAULT_TIMEOUT,
+        );
         result
     }
 
@@ -283,7 +322,11 @@ impl Backend for AdbBackend {
             args.push(format!("*:{level}"));
         }
         let refs: Vec<&str> = args.iter().map(String::as_str).collect();
-        self.adb.run_on(device, &refs, crate::adb::DEFAULT_TIMEOUT)
+        let out = self
+            .adb
+            .run_on(device, &refs, crate::adb::DEFAULT_TIMEOUT)?;
+        // 硬契约：去缓冲区块头并截取末尾 lines 行，输出行数 ≤ lines。
+        Ok(trim_logcat(&out, lines))
     }
 
     /// shell 透传：显式 -s，返回远端真实退出码（经退出码标记包装）。
@@ -410,6 +453,45 @@ mod tests {
         assert!(validate_png(b"not a png at all").is_err());
         assert!(validate_png(b"").is_err());
         assert!(validate_png(b"\x89PNG").is_err());
+    }
+
+    // ---- logcat 行数硬契约（纯函数 trim_logcat） ----
+
+    #[test]
+    fn trim_logcat_drops_buffer_headers_and_caps_lines() {
+        // 多缓冲区块头 + 总行数远超 N：截取后应 ≤ N 且保留末尾原始顺序。
+        let mut sample = String::from("--------- beginning of main\n");
+        for i in 0..30 {
+            sample.push_str(&format!("01-01 00:00:{i:02} main line {i}\n"));
+        }
+        sample.push_str("--------- beginning of system\n");
+        for i in 30..60 {
+            sample.push_str(&format!("01-01 00:00:{i:02} system line {i}\n"));
+        }
+        let out = trim_logcat(&sample, 10);
+        let kept: Vec<&str> = out.lines().collect();
+        assert!(kept.len() <= 10, "截取后行数应 ≤ 10，实际 {}", kept.len());
+        assert_eq!(kept.len(), 10);
+        assert!(kept
+            .iter()
+            .all(|l| !l.starts_with("--------- beginning of")));
+        // 末尾 10 行按原顺序保留（system line 50..=59）。
+        assert!(kept[0].contains("system line 50"));
+        assert!(kept[9].contains("system line 59"));
+    }
+
+    #[test]
+    fn trim_logcat_keeps_short_output_unchanged() {
+        // 行数不足 N 时不补不删，仅去块头。
+        let sample = "--------- beginning of main\nline a\nline b\n";
+        let out = trim_logcat(sample, 50);
+        assert_eq!(out.lines().collect::<Vec<_>>(), vec!["line a", "line b"]);
+    }
+
+    #[test]
+    fn trim_logcat_zero_lines_returns_empty() {
+        let sample = "--------- beginning of main\nline a\n";
+        assert_eq!(trim_logcat(sample, 0), "");
     }
 
     #[test]

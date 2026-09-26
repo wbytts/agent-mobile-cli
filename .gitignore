@@ -7,3 +7,5 @@
 /.codegraph/
 /target/
 node_modules/
+/npm/vendor/
+/npm/*.tgz

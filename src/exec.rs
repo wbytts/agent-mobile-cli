@@ -17,8 +17,6 @@ use std::sync::Arc;
 
 pub struct DaemonState {
     config: Config,
-    /// 命令发起侧 CLI 的工作目录（相对路径输出以其为基准）
-    cwd: Mutex<PathBuf>,
     backend: Mutex<Option<Arc<AdbBackend>>>,
     /// 快照引用缓存：设备 ID → 最近一次 snapshot 的元素引用表
     ref_cache: Mutex<HashMap<String, Vec<ElemRef>>>,
@@ -28,14 +26,9 @@ impl DaemonState {
     pub fn new(config: Config) -> Arc<Self> {
         Arc::new(Self {
             config,
-            cwd: Mutex::new(PathBuf::from(".")),
             backend: Mutex::new(None),
             ref_cache: Mutex::new(HashMap::new()),
         })
-    }
-
-    pub fn set_cwd(&self, cwd: PathBuf) {
-        *self.cwd.lock() = cwd;
     }
 
     /// 惰性初始化 ADB 后端；每次未初始化时重试探测（adb 可能后装）。
@@ -53,24 +46,14 @@ impl DaemonState {
     fn resolve(&self, selector: Option<&str>) -> Result<DeviceRecord, ErrorBody> {
         self.backend()?.resolve_device(selector, &self.config)
     }
-    /// 把 CLI 相对输出路径解析为以发起侧 cwd 为基准的绝对路径。
-    fn resolve_out(&self, out: &str) -> PathBuf {
-        let p = Path::new(out);
-        if p.is_absolute() {
-            p.to_path_buf()
-        } else {
-            self.cwd.lock().join(p)
-        }
-    }
-
-    pub fn execute(&self, command: &Command) -> Output {
-        match self.run(command) {
+    pub fn execute(&self, command: &Command, cwd: &Path) -> Output {
+        match self.run(command, cwd) {
             Ok(v) => Output::success(v),
             Err(e) => e.into(),
         }
     }
 
-    fn run(&self, command: &Command) -> Result<Value, ErrorBody> {
+    fn run(&self, command: &Command, cwd: &Path) -> Result<Value, ErrorBody> {
         match command {
             Command::Devices => {
                 let devices = self.backend()?.devices()?;
@@ -124,7 +107,7 @@ impl DaemonState {
             }
             Command::Screenshot { out, device } => {
                 let dev = self.resolve(device.as_deref())?;
-                let path = self.resolve_out(out);
+                let path = resolve_out(cwd, out);
                 let saved = self.backend()?.screenshot(&dev.id, &path)?;
                 Ok(json!({ "device": dev.id, "path": saved }))
             }
@@ -209,20 +192,29 @@ impl DaemonState {
     }
 }
 
+/// 把 CLI 相对输出路径解析为以发起侧 cwd 为基准的绝对路径（自由函数，避免跨请求共享状态）。
+fn resolve_out(cwd: &Path, out: &str) -> PathBuf {
+    let p = Path::new(out);
+    if p.is_absolute() {
+        p.to_path_buf()
+    } else {
+        cwd.join(p)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
     fn resolve_out_relative_uses_cwd() {
-        let state = DaemonState::new(Config::default());
-        state.set_cwd(PathBuf::from("/tmp/work"));
+        let cwd = Path::new("/tmp/work");
         assert_eq!(
-            state.resolve_out("shot.png"),
+            resolve_out(cwd, "shot.png"),
             PathBuf::from("/tmp/work/shot.png")
         );
         assert_eq!(
-            state.resolve_out("/abs/shot.png"),
+            resolve_out(cwd, "/abs/shot.png"),
             PathBuf::from("/abs/shot.png")
         );
     }
@@ -246,7 +238,7 @@ mod tests {
     #[test]
     fn daemon_commands_rejected() {
         let state = DaemonState::new(Config::default());
-        let out = state.execute(&Command::DaemonStatus);
+        let out = state.execute(&Command::DaemonStatus, Path::new("/tmp"));
         assert!(!out.ok);
         assert_eq!(out.error.unwrap().code, crate::output::ErrorCode::Usage);
     }

@@ -43,13 +43,21 @@ fn run(command: cli::Command) -> Output {
                 if let Err(e) = daemon::stop(&cfg) {
                     return err_output(e);
                 }
-                // 等待旧 daemon 退出（健康检查转为失败），避免 ensure 复用到正在关闭的实例
-                let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
-                while daemon::health_check(cfg.http_port) {
+                // 等待旧 daemon 退出：以「锁文件消失或锁内 pid 退出」为准（每 100ms 轮询，≤10s）。
+                // 健康检查在 /cmd 有在飞长命令时会持续通过，不能作为退出判据。
+                let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+                loop {
+                    let exited = match daemon::lock::read_lock(&config::Config::dir()) {
+                        None => true,
+                        Some(info) => !daemon::lock::pid_alive(info.pid),
+                    };
+                    if exited {
+                        break;
+                    }
                     if std::time::Instant::now() >= deadline {
                         return Output::failure(
                             ErrorCode::Timeout,
-                            "旧 daemon 未在 5 秒内退出",
+                            "旧 daemon 未在 10 秒内退出（可能有长命令在飞，可稍后重试 daemon-status 确认）",
                             None,
                         );
                     }

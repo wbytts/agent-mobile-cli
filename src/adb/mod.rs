@@ -1,5 +1,4 @@
 //! adb 可执行文件封装：探测链与子进程调用（design.md 决策 2/3）。
-// TODO(接线): CLI/daemon 命令接线后移除本行（参考 ui.rs 约定，避免组 2-4 接线前 dead_code 警告）。
 use crate::backend::{
     BResult, BackendKind, ConnectionKind, DeviceRecord, DeviceState, ShellResult,
 };

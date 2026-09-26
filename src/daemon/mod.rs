@@ -71,10 +71,28 @@ async fn run_async(config: &Config) -> BResult<()> {
 
 /// 确保 daemon 在运行：健康检查失败时清理过期锁并后台拉起，轮询 /health 最多 5 秒。
 pub fn ensure_daemon(config: &Config) -> BResult<()> {
+    ensure_daemon_in(config, &Config::dir())
+}
+
+/// [`ensure_daemon`] 的实现，锁目录可注入（测试用临时目录，避免污染用户配置目录）。
+fn ensure_daemon_in(config: &Config, dir: &std::path::Path) -> BResult<()> {
     if health_check(config.http_port) {
         return Ok(());
     }
-    lock::remove_stale_lock(&Config::dir())?;
+    // 配置端口不通但锁内 daemon 在其他端口健康存活：端口配置漂移，
+    // 直接给出指引，而不是再拉一个 daemon 造成端口冲突
+    if let Some(info) = lock::read_lock(dir) {
+        if info.port != config.http_port
+            && lock::pid_alive(info.pid)
+            && lock::port_listening(info.port)
+        {
+            return Err(ErrorBody::io_error(format!(
+                "daemon 已在端口 {} 运行（pid {}），与配置端口 {} 不一致；请将配置改回 {} 或先执行 daemon-stop",
+                info.port, info.pid, config.http_port, info.port
+            )));
+        }
+    }
+    lock::remove_stale_lock(dir)?;
     spawn_daemon()?;
     let deadline = Instant::now() + Duration::from_secs(5);
     while Instant::now() < deadline {
@@ -85,7 +103,7 @@ pub fn ensure_daemon(config: &Config) -> BResult<()> {
     }
     Err(ErrorBody::timeout(format!(
         "daemon 启动超时（5 秒内健康检查未通过），日志见 {}",
-        Config::dir().join("daemon.log").display()
+        dir.join("daemon.log").display()
     )))
 }
 
@@ -125,26 +143,43 @@ fn spawn_daemon() -> BResult<()> {
 
 /// `daemon-status`：锁文件 + /health 汇总运行状态。
 pub fn status(config: &Config) -> BResult<Value> {
-    let info = lock::read_lock(&Config::dir());
-    let healthy = health_check(config.http_port);
+    status_in(config, &Config::dir())
+}
+
+/// [`status`] 的实现，锁目录可注入（测试用临时目录）。
+fn status_in(config: &Config, dir: &std::path::Path) -> BResult<Value> {
+    let info = lock::read_lock(dir);
+    // 健康检查端口：优先锁内端口（配置端口可能被改），锁缺失时回落配置端口
+    let port = info.as_ref().map(|i| i.port).unwrap_or(config.http_port);
+    let healthy = health_check(port);
     match (info, healthy) {
         (Some(info), true) => {
-            let health = http_request(
-                config.http_port,
-                "GET",
-                "/health",
-                None,
-                Duration::from_secs(2),
-            )
-            .ok()
-            .and_then(|body| serde_json::from_str::<Value>(&body).ok())
-            .unwrap_or_else(|| json!({}));
+            let health = http_request(port, "GET", "/health", None, Duration::from_secs(2))
+                .ok()
+                .and_then(|body| serde_json::from_str::<Value>(&body).ok())
+                .unwrap_or_else(|| json!({}));
             Ok(json!({
                 "running": true,
                 "pid": info.pid,
-                "http_port": config.http_port,
+                "http_port": port,
                 "bridge_port": config.bridge_port,
                 "started_at_epoch_secs": info.started_at_epoch_secs,
+                "version": health.get("version").cloned().unwrap_or(Value::Null),
+                "uptime_secs": health.get("uptime_secs").cloned().unwrap_or(Value::Null),
+            }))
+        }
+        // 锁缺失但端口健康（例如锁被手工删除）：报运行中，pid/started_at 无从得知置 null
+        (None, true) => {
+            let health = http_request(port, "GET", "/health", None, Duration::from_secs(2))
+                .ok()
+                .and_then(|body| serde_json::from_str::<Value>(&body).ok())
+                .unwrap_or_else(|| json!({}));
+            Ok(json!({
+                "running": true,
+                "pid": Value::Null,
+                "http_port": port,
+                "bridge_port": config.bridge_port,
+                "started_at_epoch_secs": Value::Null,
                 "version": health.get("version").cloned().unwrap_or(Value::Null),
                 "uptime_secs": health.get("uptime_secs").cloned().unwrap_or(Value::Null),
             }))
@@ -159,11 +194,22 @@ pub fn status(config: &Config) -> BResult<Value> {
 
 /// `daemon-stop`：POST /shutdown；无 daemon 运行时报错。
 pub fn stop(config: &Config) -> BResult<()> {
-    if !health_check(config.http_port) {
-        return Err(ErrorBody::io_error("daemon 未运行"));
-    }
+    stop_in(config, &Config::dir())
+}
+
+/// [`stop`] 的实现，锁目录可注入（测试用临时目录）。
+fn stop_in(config: &Config, dir: &std::path::Path) -> BResult<()> {
+    let port = if health_check(config.http_port) {
+        config.http_port
+    } else {
+        // 配置端口不通：若锁内端口在监听（配置端口被改），按锁内端口关停
+        match lock::read_lock(dir) {
+            Some(info) if lock::port_listening(info.port) => info.port,
+            _ => return Err(ErrorBody::io_error("daemon 未运行")),
+        }
+    };
     http_request(
-        config.http_port,
+        port,
         "POST",
         "/shutdown",
         Some("{}"),
@@ -235,4 +281,184 @@ fn http_request(
         )));
     }
     Ok(raw.split("\r\n\r\n").nth(1).unwrap_or("").to_string())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::daemon::lock::{LockInfo, LOCK_FILE_NAME};
+    use std::io::ErrorKind;
+    use std::net::TcpListener;
+    use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+    use std::sync::Arc;
+
+    /// 极简 HTTP stub：任何请求返回 200 + JSON；记录 /shutdown 命中次数。
+    struct StubServer {
+        port: u16,
+        shutdowns: Arc<AtomicUsize>,
+        stop: Arc<AtomicBool>,
+        handle: Option<std::thread::JoinHandle<()>>,
+    }
+
+    impl StubServer {
+        fn start() -> Self {
+            let listener = TcpListener::bind("127.0.0.1:0").expect("绑定随机端口");
+            listener.set_nonblocking(true).expect("设置非阻塞");
+            let port = listener.local_addr().expect("读取本地地址").port();
+            let shutdowns = Arc::new(AtomicUsize::new(0));
+            let stop = Arc::new(AtomicBool::new(false));
+            let shutdowns2 = Arc::clone(&shutdowns);
+            let stop2 = Arc::clone(&stop);
+            let handle = std::thread::spawn(move || {
+                while !stop2.load(Ordering::SeqCst) {
+                    match listener.accept() {
+                        Ok((mut stream, _)) => {
+                            stream
+                                .set_read_timeout(Some(Duration::from_millis(500)))
+                                .expect("设置读超时");
+                            let mut buf = [0u8; 4096];
+                            let n = stream.read(&mut buf).unwrap_or(0);
+                            let req = String::from_utf8_lossy(&buf[..n]);
+                            let body = if req.starts_with("POST /shutdown") {
+                                shutdowns2.fetch_add(1, Ordering::SeqCst);
+                                r#"{"ok":true}"#
+                            } else {
+                                r#"{"ok":true,"version":"stub","uptime_secs":1}"#
+                            };
+                            let response = format!(
+                                "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+                                body.len()
+                            );
+                            let _ = stream.write_all(response.as_bytes());
+                        }
+                        Err(e) if e.kind() == ErrorKind::WouldBlock => {
+                            std::thread::sleep(Duration::from_millis(5));
+                        }
+                        Err(_) => break,
+                    }
+                }
+            });
+            Self {
+                port,
+                shutdowns,
+                stop,
+                handle: Some(handle),
+            }
+        }
+    }
+
+    impl Drop for StubServer {
+        fn drop(&mut self) {
+            self.stop.store(true, Ordering::SeqCst);
+            if let Some(handle) = self.handle.take() {
+                let _ = handle.join();
+            }
+        }
+    }
+
+    fn temp_dir() -> tempfile::TempDir {
+        tempfile::tempdir().expect("创建临时目录")
+    }
+
+    /// 取一个当前无人监听的空闲端口（绑定后立刻释放）。
+    fn unused_port() -> u16 {
+        let listener = TcpListener::bind("127.0.0.1:0").expect("绑定随机端口");
+        listener.local_addr().expect("读取本地地址").port()
+    }
+
+    fn write_lock(dir: &std::path::Path, port: u16) {
+        let info = LockInfo {
+            pid: std::process::id(),
+            port,
+            started_at_epoch_secs: 1,
+        };
+        std::fs::write(
+            dir.join(LOCK_FILE_NAME),
+            serde_json::to_string(&info).expect("序列化锁"),
+        )
+        .expect("写入锁文件");
+    }
+
+    #[test]
+    fn ensure_daemon_port_mismatch_returns_guidance() {
+        let dir = temp_dir();
+        let server = StubServer::start();
+        // 配置端口被改：与锁内端口不一致，且锁内 daemon 健康存活
+        let config = Config {
+            http_port: unused_port(),
+            ..Config::default()
+        };
+        write_lock(dir.path(), server.port);
+        let err = ensure_daemon_in(&config, dir.path()).expect_err("端口不一致应直接报错");
+        assert!(
+            err.message.contains(&server.port.to_string()),
+            "错误应包含锁内端口 {}: {}",
+            server.port,
+            err.message
+        );
+        assert!(
+            err.message.contains(&config.http_port.to_string()),
+            "错误应包含配置端口 {}: {}",
+            config.http_port,
+            err.message
+        );
+        assert!(
+            err.message.contains("daemon-stop"),
+            "错误应给出指引: {}",
+            err.message
+        );
+    }
+
+    #[test]
+    fn status_prefers_lock_port_when_config_port_changed() {
+        let dir = temp_dir();
+        let server = StubServer::start();
+        // 配置端口不通，但锁内端口上的 daemon 健康：status 应按锁内端口判定
+        let config = Config {
+            http_port: unused_port(),
+            ..Config::default()
+        };
+        write_lock(dir.path(), server.port);
+        let value = status_in(&config, dir.path()).expect("status 调用");
+        assert_eq!(value["running"], true, "锁内端口健康应报运行中: {value}");
+        assert_eq!(value["pid"], std::process::id());
+        assert_eq!(value["http_port"], server.port);
+        assert_eq!(value["started_at_epoch_secs"], 1);
+    }
+
+    #[test]
+    fn status_lock_missing_but_healthy_reports_running() {
+        let dir = temp_dir();
+        let server = StubServer::start();
+        // 锁文件缺失但配置端口健康（例如锁被手工删除）：(None, true) 不得误报未运行
+        let config = Config {
+            http_port: server.port,
+            ..Config::default()
+        };
+        let value = status_in(&config, dir.path()).expect("status 调用");
+        assert_eq!(value["running"], true, "健康检查通过应报运行中: {value}");
+        assert!(value["pid"].is_null(), "锁缺失时 pid 应为 null: {value}");
+        assert!(
+            value["started_at_epoch_secs"].is_null(),
+            "锁缺失时 started_at 应为 null: {value}"
+        );
+    }
+
+    #[test]
+    fn stop_uses_lock_port_when_config_port_unreachable() {
+        let dir = temp_dir();
+        let server = StubServer::start();
+        // 配置端口不通，锁内端口在监听：stop 应按锁内端口 POST /shutdown
+        let config = Config {
+            http_port: unused_port(),
+            ..Config::default()
+        };
+        write_lock(dir.path(), server.port);
+        stop_in(&config, dir.path()).expect("stop 应按锁内端口关停");
+        assert_eq!(
+            server.shutdowns.load(Ordering::SeqCst),
+            1,
+            "应向锁内端口发起一次 /shutdown"
+        );
+    }
 }

@@ -20,6 +20,11 @@ pub const LOCK_FILE_NAME: &str = "daemon.lock";
 /// 竞争重试上限：过期锁删除与创建之间允许其他实例抢先，有限次重试后报错。
 const MAX_ATTEMPTS: u32 = 8;
 
+/// 启动宽限：锁内 pid 存活但端口尚未监听时，每 50ms 复查端口，最多等待 2s。
+/// 覆盖 daemon「已写锁、未绑定端口」的启动窗口，避免竞争方误删活锁。
+const STARTUP_GRACE: Duration = Duration::from_secs(2);
+const STARTUP_GRACE_POLL: Duration = Duration::from_millis(50);
+
 /// 锁文件内容。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct LockInfo {
@@ -67,13 +72,25 @@ impl DaemonLock {
                     return Ok(LockOutcome::Acquired(DaemonLock { info, path }));
                 }
                 Err(e) if e.kind() == ErrorKind::AlreadyExists => match read_lock_with_grace(dir) {
-                    Some(old) if pid_alive(old.pid) && port_listening(old.port) => {
-                        return Ok(LockOutcome::AlreadyRunning {
-                            pid: old.pid,
-                            port: old.port,
-                        });
+                    Some(old) if pid_alive(old.pid) => {
+                        if port_listening(old.port) || wait_for_port(old.port) {
+                            return Ok(LockOutcome::AlreadyRunning {
+                                pid: old.pid,
+                                port: old.port,
+                            });
+                        }
+                        if pid_alive(old.pid) {
+                            // 宽限耗尽但持有进程仍存活：视为仍处启动（或卡在启动），
+                            // 报 AlreadyRunning 而不回收，避免误删活锁造成双 daemon
+                            return Ok(LockOutcome::AlreadyRunning {
+                                pid: old.pid,
+                                port: old.port,
+                            });
+                        }
+                        // 持有进程在宽限期间退出：过期锁，删除后重新竞争
+                        let _ = fs::remove_file(&path);
                     }
-                    // 过期或损坏的锁：删除后重新竞争
+                    // 损坏或 pid 已死的锁：删除后重新竞争
                     _ => {
                         let _ = fs::remove_file(&path);
                     }
@@ -142,6 +159,18 @@ pub fn pid_alive(_pid: u32) -> bool {
 pub fn port_listening(port: u16) -> bool {
     let addr = SocketAddr::from(([127, 0, 0, 1], port));
     TcpStream::connect_timeout(&addr, Duration::from_millis(200)).is_ok()
+}
+
+/// 启动宽限内轮询端口：每 50ms 复查一次，最多等待 [`STARTUP_GRACE`]，端口转监听即返回 true。
+fn wait_for_port(port: u16) -> bool {
+    let deadline = std::time::Instant::now() + STARTUP_GRACE;
+    while std::time::Instant::now() < deadline {
+        std::thread::sleep(STARTUP_GRACE_POLL);
+        if port_listening(port) {
+            return true;
+        }
+    }
+    false
 }
 
 /// 健康检查失败后清理过期锁；运行中的锁不动。返回是否实际删除。
@@ -293,6 +322,145 @@ mod tests {
         fs::write(dir.path().join(LOCK_FILE_NAME), "not-json").expect("写入损坏锁");
         let outcome = DaemonLock::acquire(dir.path(), 9).expect("回收损坏锁");
         assert!(matches!(outcome, LockOutcome::Acquired(_)));
+    }
+
+    /// 取一个当前无人监听的空闲端口（绑定后立刻释放）。
+    fn unlistened_port() -> u16 {
+        let listener = TcpListener::bind("127.0.0.1:0").expect("绑定随机端口");
+        listener.local_addr().expect("读取本地地址").port()
+    }
+
+    #[test]
+    fn startup_grace_waits_for_late_listener() {
+        let dir = temp_dir();
+        let port = unlistened_port();
+        // 预写一把「当前 pid + 端口未监听」的锁，模拟 daemon 已起进程但还没绑定端口的启动窗口
+        let starting = LockInfo {
+            pid: std::process::id(),
+            port,
+            started_at_epoch_secs: 1,
+        };
+        fs::write(
+            dir.path().join(LOCK_FILE_NAME),
+            serde_json::to_string(&starting).expect("序列化锁"),
+        )
+        .expect("写入锁");
+        // 300ms 后端口转监听（启动窗口内完成绑定）
+        let listener_thread = std::thread::spawn(move || {
+            std::thread::sleep(Duration::from_millis(300));
+            TcpListener::bind(("127.0.0.1", port)).expect("延迟绑定端口")
+        });
+        let outcome = DaemonLock::acquire(dir.path(), port).expect("启动窗口内获取");
+        assert!(
+            matches!(outcome, LockOutcome::AlreadyRunning { .. }),
+            "宽限内端口转监听应判 AlreadyRunning，不得删锁返回 Acquired"
+        );
+        assert!(
+            dir.path().join(LOCK_FILE_NAME).exists(),
+            "启动窗口内的活锁不得被误删"
+        );
+        let _listener = listener_thread.join().expect("join 监听线程");
+    }
+
+    #[test]
+    fn grace_exhausted_with_alive_holder_reports_running() {
+        let dir = temp_dir();
+        let port = unlistened_port();
+        // pid 存活（当前进程）但端口始终不监听：宽限耗尽后按存活进程报 AlreadyRunning，不误删活锁
+        let alive = LockInfo {
+            pid: std::process::id(),
+            port,
+            started_at_epoch_secs: 1,
+        };
+        fs::write(
+            dir.path().join(LOCK_FILE_NAME),
+            serde_json::to_string(&alive).expect("序列化锁"),
+        )
+        .expect("写入锁");
+        let started = std::time::Instant::now();
+        let outcome = DaemonLock::acquire(dir.path(), port).expect("宽限耗尽后获取");
+        let elapsed = started.elapsed();
+        assert!(
+            matches!(outcome, LockOutcome::AlreadyRunning { pid, .. } if pid == std::process::id()),
+            "持有进程存活时应报 AlreadyRunning 而非回收"
+        );
+        assert!(
+            elapsed >= Duration::from_secs(2),
+            "应等满 2s 启动宽限而非立即判定，实际 {elapsed:?}"
+        );
+        assert!(dir.path().join(LOCK_FILE_NAME).exists(), "活锁不得被误删");
+    }
+
+    /// 双进程并发竞争（design 测试策略）：current_exe + LOCK_RACE_CHILD 环境变量模式。
+    /// 端口始终不监听（模拟启动窗口），恰一个子进程 Acquired，另一个 AlreadyRunning。
+    #[test]
+    fn dual_process_race() {
+        const CHILD_ENV: &str = "LOCK_RACE_CHILD";
+        const DIR_ENV: &str = "LOCK_RACE_DIR";
+        const PORT_ENV: &str = "LOCK_RACE_PORT";
+        if std::env::var_os(CHILD_ENV).is_some() {
+            // 子进程逻辑：竞争锁并把结果打印到 stdout
+            let dir = std::env::var(DIR_ENV).expect("子进程缺少锁目录");
+            let port: u16 = std::env::var(PORT_ENV)
+                .expect("子进程缺少端口")
+                .parse()
+                .expect("端口解析");
+            let outcome = DaemonLock::acquire(Path::new(&dir), port).expect("子进程获取锁");
+            match outcome {
+                LockOutcome::Acquired(lock) => {
+                    println!("ACQUIRED");
+                    // 持有锁并存活足够久：覆盖竞争方的 2s 启动宽限，避免其把活锁按过期回收
+                    std::thread::sleep(Duration::from_secs(3));
+                    drop(lock);
+                }
+                LockOutcome::AlreadyRunning { .. } => println!("ALREADY_RUNNING"),
+            }
+            return;
+        }
+        // 父进程：spawn 两个子进程竞争同一锁目录与未监听端口
+        let dir = temp_dir();
+        let port = unlistened_port();
+        let exe = std::env::current_exe().expect("定位当前测试二进制");
+        let spawn_child = || {
+            std::process::Command::new(&exe)
+                .args([
+                    "--exact",
+                    "daemon::lock::tests::dual_process_race",
+                    "--test-threads=1",
+                    "--nocapture",
+                ])
+                .env(CHILD_ENV, "1")
+                .env(DIR_ENV, dir.path())
+                .env(PORT_ENV, port.to_string())
+                .stdout(std::process::Stdio::piped())
+                .stderr(std::process::Stdio::null())
+                .spawn()
+                .expect("spawn 子进程")
+        };
+        let child_a = spawn_child();
+        let child_b = spawn_child();
+        let out_a = child_a.wait_with_output().expect("等待子进程 A");
+        let out_b = child_b.wait_with_output().expect("等待子进程 B");
+        assert!(out_a.status.success(), "子进程 A 退出码异常");
+        assert!(out_b.status.success(), "子进程 B 退出码异常");
+        let stdout_a = String::from_utf8_lossy(&out_a.stdout);
+        let stdout_b = String::from_utf8_lossy(&out_b.stdout);
+        let acquired = [stdout_a.contains("ACQUIRED"), stdout_b.contains("ACQUIRED")]
+            .into_iter()
+            .filter(|hit| *hit)
+            .count();
+        let already = [
+            stdout_a.contains("ALREADY_RUNNING"),
+            stdout_b.contains("ALREADY_RUNNING"),
+        ]
+        .into_iter()
+        .filter(|hit| *hit)
+        .count();
+        assert_eq!(
+            (acquired, already),
+            (1, 1),
+            "双进程竞争应恰一个 Acquired 一个 AlreadyRunning；A: {stdout_a} B: {stdout_b}"
+        );
     }
 
     #[test]
