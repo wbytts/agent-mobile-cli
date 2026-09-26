@@ -2,7 +2,7 @@
 
 - 日期：2026-09-26
 - 验证模式：full（24 任务 / 3 delta 能力 / 65 变更文件）
-- diff 范围：`20b4422..HEAD`（11 个提交）
+- diff 范围：`20b4422..HEAD`（13 个提交）
 - 权威任务：24/24 完成（tasks.md 全部 `[x]`，sync-plan 复核一致）
 
 ## Summary
@@ -17,10 +17,10 @@
 
 | 检查 | 结果 | 证据 |
 |---|---|---|
-| `cargo test`（85+54+54） | exit=0 | check log 0884b2ea |
-| `cargo clippy --all-targets -- -D warnings` | exit=0 | check log ad178120 |
-| `cargo fmt --check` | exit=0 | check log e9a296df |
-| MuMu 集成测试（12 项，`--ignored`） | exit=0 | check log 4abe7450 |
+| `cargo test`（87+54+54，含 shell 防护 2 单测） | exit=0 | check log c63e1877 |
+| `cargo clippy --all-targets -- -D warnings` | exit=0 | check log 63121b95 |
+| `cargo fmt --check` | exit=0 | check log cc3077f1 |
+| MuMu 集成测试（12 项，`--ignored`） | exit=0 | check log 9c4b06bf |
 
 ## 最终集成代码审查（review_mode=standard）
 
@@ -86,8 +86,10 @@
 
 ## 最终评估
 
-无 CRITICAL 问题。集成审查补查结论见下节。Ready for archive（补查若无 CRITICAL/IMPORTANT）。
+无 CRITICAL 问题，无 WARNING（全部 MINOR 修复闭环）。**All checks passed. Ready for archive.**
 
-## 补查结论（ed0509e..26b9501）
+## 补查结论（ed0509e..HEAD）
 
-待 FinalReview 返回后填写。
+- 补查 1（reviewer，ed0509e..26b9501）：**correct，无阻断问题**。发现 3 条 MINOR（--device= 等号穿透、USAGE 消息缺绕过指引、超时消息硬编码），全部修复于 76d099e。
+- 复核（reviewer，76d099e）：3 条 MINOR 全部妥善解决，**无阻断问题**。新发现 1 条 MINOR：`shell_allows_quoted_device_literal` 断言 `!out.ok` 耦合宿主设备数量（单设备环境误败），已按 reviewer 建议改为「error 存在时断言非 Usage」解耦（测试全绿 87+54+54，单设备/CI 环境均安全）。
+- 最终状态：无 CRITICAL / IMPORTANT / WARNING；全部审查轮次 closed。
