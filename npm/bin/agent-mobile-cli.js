@@ -14,11 +14,11 @@ function resolveBinary() {
 
 const bin = resolveBinary();
 if (!bin) {
-  console.error(
+  console.log(
     JSON.stringify({
       ok: false,
       error: {
-        code: "ADB_NOT_FOUND",
+        code: "IO_ERROR",
         message: `未找到 ${process.platform}-${process.arch} 平台的 agent-mobile-cli 二进制；请重新安装（npm i -g agent-mobile-cli）或参考 README 从源码 cargo build --release 构建`,
       },
     })

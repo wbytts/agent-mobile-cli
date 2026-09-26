@@ -40,4 +40,4 @@
 
 ## 6. 端到端验收
 
-- [ ] 6.1 在 MuMu 模拟器执行全链路验收：devices → connect → snapshot → tap → input → screenshot → logcat → shell，逐项对照 specs 场景通过 <!-- comet-task:383a8dbf-e7bb-4e09-9d20-e34c7e9b4a83 -->
+- [x] 6.1 在 MuMu 模拟器执行全链路验收：devices → connect → snapshot → tap → input → screenshot → logcat → shell，逐项对照 specs 场景通过 <!-- comet-task:383a8dbf-e7bb-4e09-9d20-e34c7e9b4a83 -->

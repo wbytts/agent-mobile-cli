@@ -63,7 +63,7 @@ fn snapshot_returns_tree_with_refs() {
 #[ignore = "需要真实 adb 与在线设备"]
 fn concurrent_snapshots_both_succeed() {
     // 并发安全回归：两个线程对同设备并发 snapshot，
-    // 各自使用唯一临时文件（NamedTempFile），均应成功且树非空。
+    // backend 以 pid+原子序号生成唯一临时路径并加进程内临界区锁，均应成功且树非空。
     let Some(target) = target_device() else {
         eprintln!("跳过：未设置 AGENT_MOBILE_TEST_DEVICE");
         return;
