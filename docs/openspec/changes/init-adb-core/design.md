@@ -50,7 +50,7 @@ adb 子进程 (主机 platform-tools)  ->  adb server (5037)  ->  MuMu 127.0.0.1
 4. **UI 快照走 uiautomator dump**：设备端生成 UI XML → 拉取解析 → 简化树 → 可交互节点按先序分配 `@eN` 引用。简化规则：剔除零面积节点与无文本无描述且不可交互的容器（递归上提子节点）；`@eN` 引用只分配给 clickable/long-clickable/focusable/scrollable 为真的节点，带文本/描述的非交互叶子保留在树中可见但不获引用（实现后以测试为准的澄清，不改变 spec 的「可交互元素分配引用」契约）。引用表记录各 `@eN` 的坐标中心点，存于 daemon 内存，每次 snapshot 全量刷新，daemon 重启失效（文档明示「引用仅对最近一次快照有效」）。
 5. **输入边界**：`input text` 仅支持 ASCII（adb input 限制，空格转义为 `%s`）；含非 ASCII 的输入返回 `NOT_SUPPORTED` 结构化错误，不引入 ADBKeyBoard 等 IME 依赖。`key` 接受 keyevent 名称或数字码。
 6. **截图/日志/应用的命令选型**：截图 `adb exec-out screencap -p`（exec-out 避免 PTY 换行损坏二进制，需 platform-tools 28+，启动时检测版本）；logcat `adb logcat -d -t <lines>` dump 模式（非阻塞，支持 tag/级别过滤）；启动应用 `monkey -p <pkg> 1`（免查 launcher activity）；停止 `am force-stop`。
-7. **输出与错误模型**：stdout 恒为 JSON——成功 `{"ok":true,"result":{...}}`，失败 `{"ok":false,"error":{"code","message","details"}}`；退出码 0 成功、1 执行错误（clap 用法错误为 2）。错误码枚举：`ADB_NOT_FOUND`、`DEVICE_OFFLINE`、`DEVICE_AMBIGUOUS`、`DEVICE_NOT_FOUND`、`NOT_SUPPORTED`、`TIMEOUT`、`ADB_ERROR`、`IO_ERROR`。
+7. **输出与错误模型**：stdout 恒为 JSON——成功 `{"ok":true,"result":{...}}`，失败 `{"ok":false,"error":{"code","message","details"}}`；退出码 0 成功、1 执行错误（clap 用法错误为 2）。错误码枚举：`ADB_NOT_FOUND`、`DEVICE_OFFLINE`、`DEVICE_AMBIGUOUS`、`DEVICE_NOT_FOUND`、`NOT_SUPPORTED`、`TIMEOUT`、`ADB_ERROR`、`IO_ERROR`、`USAGE`（参数语义错误，退出码 2；Build 期实现驱动的补充，不改变 spec 场景）。
 8. **启动锁**：锁文件 + 端口探测双重判定，锁内记录 pid 与启动时间，过期锁可回收；CLI 健康检查失败时自动清理并重启 daemon。
 9. **配置与端口**：用户级 `~/.agent-mobile-cli/config.json`（`http_port` 默认 18775、`bridge_port` 默认 18777、`adb_path`、`default_device`），缺失自动生成默认值；端口默认值避开 agent-browser-cli 的 18765/18767。
 10. **后端抽象层**：统一后端接口（设备枚举、快照、触控、截图、shell、日志、应用管理），设备记录携带后端类型标识，路由按设备 ID 分发；`adb` 为首个实现，`app-bridge` 预留类型位。

@@ -9,6 +9,7 @@ mod adb;
 mod backend;
 #[path = "../src/config.rs"]
 mod config;
+#[allow(dead_code)]
 #[path = "../src/output.rs"]
 mod output;
 #[path = "../src/ui.rs"]

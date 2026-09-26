@@ -1,8 +1,6 @@
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
-// 错误面由 design.md 决策 7 定义；组 2-4 逐命令接入后移除此 allow（Build 任务内清理）
-#[allow(dead_code)]
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 pub enum ErrorCode {
     AdbNotFound,
@@ -13,9 +11,11 @@ pub enum ErrorCode {
     Timeout,
     AdbError,
     IoError,
+    /// 命令用法/参数语义错误（对应退出码 2）
+    Usage,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ErrorBody {
     pub code: ErrorCode,
     pub message: String,
@@ -69,9 +69,18 @@ impl ErrorBody {
     pub fn io_error(message: impl Into<String>) -> Self {
         Self::new(ErrorCode::IoError, message, None)
     }
+    pub fn usage(message: impl Into<String>) -> Self {
+        Self::new(ErrorCode::Usage, message, None)
+    }
 }
 
-#[derive(Debug, Clone, Serialize)]
+impl From<ErrorBody> for Output {
+    fn from(e: ErrorBody) -> Self {
+        Output::failure(e.code, e.message, e.details)
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Output {
     pub ok: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -80,7 +89,6 @@ pub struct Output {
     pub error: Option<ErrorBody>,
 }
 
-#[allow(dead_code)]
 impl Output {
     pub fn success(result: serde_json::Value) -> Self {
         Self {
@@ -109,6 +117,8 @@ impl Output {
     pub fn exit_code(&self) -> i32 {
         if self.ok {
             0
+        } else if self.error.as_ref().map(|e| e.code) == Some(ErrorCode::Usage) {
+            2
         } else {
             1
         }

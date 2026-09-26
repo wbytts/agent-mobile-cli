@@ -53,8 +53,9 @@ async fn run_async(config: &Config) -> BResult<()> {
         lock.info.pid, config.http_port, config.bridge_port
     );
     let shutdown = Arc::new(Notify::new());
+    let exec_state = crate::exec::DaemonState::new(config.clone());
     tokio::select! {
-        result = http::serve(http_listener, Arc::clone(&shutdown)) => {
+        result = http::serve(http_listener, Arc::clone(&shutdown), exec_state) => {
             result.map_err(|e| ErrorBody::io_error(format!("HTTP 服务异常退出: {e}")))?;
         }
         result = ws::serve(ws_listener, Arc::clone(&shutdown)) => {
@@ -179,6 +180,19 @@ pub fn health_check(port: u16) -> bool {
         .and_then(|body| serde_json::from_str::<Value>(&body).ok())
         .and_then(|v| v.get("ok")?.as_bool())
         .unwrap_or(false)
+}
+
+/// CLI 侧把原始命令参数转发给 daemon 执行；返回 daemon 的结构化输出。
+pub fn post_cmd(
+    port: u16,
+    args: &[String],
+    cwd: &std::path::Path,
+) -> BResult<crate::output::Output> {
+    let body = json!({ "args": args, "cwd": cwd }).to_string();
+    let raw = http_request(port, "POST", "/cmd", Some(&body), Duration::from_secs(120))
+        .map_err(|e| ErrorBody::io_error(format!("转发命令到 daemon 失败: {e}")))?;
+    serde_json::from_str(&raw)
+        .map_err(|e| ErrorBody::io_error(format!("daemon 响应解析失败: {e}（原始响应: {raw}）")))
 }
 
 /// 极简同步 HTTP/1.1 客户端（CLI 短进程侧使用）；返回响应 body，非 2xx 视为错误。

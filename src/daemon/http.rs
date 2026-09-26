@@ -1,4 +1,4 @@
-//! daemon HTTP API：`GET /health`、`POST /cmd`（占位回显）、`POST /shutdown`（design.md 决策 2）。
+//! daemon HTTP API：`GET /health`、`POST /cmd`（命令路由到 backend 执行）、`POST /shutdown`（design.md 决策 2）。
 
 use axum::extract::State;
 use axum::routing::{get, post};
@@ -14,13 +14,19 @@ use tokio::sync::Notify;
 struct AppState {
     started: Instant,
     shutdown: Arc<Notify>,
+    exec: Arc<crate::exec::DaemonState>,
 }
 
 /// 在已绑定的 listener 上提供 HTTP 服务；`shutdown` 被通知后优雅退出。
-pub async fn serve(listener: TcpListener, shutdown: Arc<Notify>) -> std::io::Result<()> {
+pub async fn serve(
+    listener: TcpListener,
+    shutdown: Arc<Notify>,
+    exec: Arc<crate::exec::DaemonState>,
+) -> std::io::Result<()> {
     let state = AppState {
         started: Instant::now(),
         shutdown: Arc::clone(&shutdown),
+        exec,
     };
     let app = Router::new()
         .route("/health", get(health))
@@ -46,11 +52,28 @@ async fn health(State(state): State<AppState>) -> Json<Value> {
 struct CmdRequest {
     #[serde(default)]
     args: Vec<String>,
+    /// 命令发起侧 CLI 的工作目录（相对路径输出以其为基准）
+    #[serde(default)]
+    cwd: Option<String>,
 }
 
-async fn cmd(Json(req): Json<CmdRequest>) -> Json<Value> {
-    // TODO（组 4 接入命令路由）：解析 args 并分发到 backend 执行，当前为回显占位
-    Json(json!({ "ok": true, "result": { "echo": req.args } }))
+async fn cmd(State(state): State<AppState>, Json(req): Json<CmdRequest>) -> Json<Value> {
+    if let Some(cwd) = req.cwd {
+        state.exec.set_cwd(cwd.into());
+    }
+    let argv: Vec<String> = std::iter::once("agent-mobile-cli".to_string())
+        .chain(req.args)
+        .collect();
+    let parsed = <crate::cli::Cli as clap::Parser>::try_parse_from(argv);
+    let out = match parsed {
+        Ok(cli) => state.exec.execute(&cli.command),
+        Err(e) => crate::output::Output::failure(
+            crate::output::ErrorCode::Usage,
+            e.to_string().trim().to_string(),
+            None,
+        ),
+    };
+    Json(serde_json::to_value(out).expect("输出序列化"))
 }
 
 async fn shutdown_handler(State(state): State<AppState>) -> Json<Value> {
@@ -63,6 +86,10 @@ mod tests {
     use super::*;
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
+    fn test_state() -> Arc<crate::exec::DaemonState> {
+        crate::exec::DaemonState::new(crate::config::Config::default())
+    }
+
     async fn start() -> (
         u16,
         Arc<Notify>,
@@ -73,7 +100,7 @@ mod tests {
             .expect("绑定随机端口");
         let port = listener.local_addr().expect("读取本地地址").port();
         let shutdown = Arc::new(Notify::new());
-        let handle = tokio::spawn(serve(listener, Arc::clone(&shutdown)));
+        let handle = tokio::spawn(serve(listener, Arc::clone(&shutdown), test_state()));
         (port, shutdown, handle)
     }
 
@@ -131,13 +158,27 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn cmd_echoes_args_placeholder() {
+    async fn cmd_invalid_command_returns_usage_error() {
         let (port, shutdown, handle) = start().await;
-        let raw = http_post(port, "/cmd", r#"{"args":["devices","--device","emu"]}"#).await;
+        let raw = http_post(port, "/cmd", r#"{"args":["no-such-cmd"]}"#).await;
         assert!(raw.starts_with("HTTP/1.1 200"), "响应行: {raw}");
         let v: Value = serde_json::from_str(body_of(&raw)).expect("解析 /cmd body");
-        assert_eq!(v["ok"], true);
-        assert_eq!(v["result"]["echo"], json!(["devices", "--device", "emu"]));
+        assert_eq!(v["ok"], false);
+        assert_eq!(v["error"]["code"], "USAGE");
+        shutdown.notify_one();
+        handle
+            .await
+            .expect("join http 服务")
+            .expect("http 服务退出");
+    }
+
+    #[tokio::test]
+    async fn cmd_daemon_lifecycle_rejected() {
+        let (port, shutdown, handle) = start().await;
+        let raw = http_post(port, "/cmd", r#"{"args":["daemon-status"]}"#).await;
+        let v: Value = serde_json::from_str(body_of(&raw)).expect("解析 /cmd body");
+        assert_eq!(v["ok"], false);
+        assert_eq!(v["error"]["code"], "USAGE");
         shutdown.notify_one();
         handle
             .await

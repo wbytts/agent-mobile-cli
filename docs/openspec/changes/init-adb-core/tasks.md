@@ -8,18 +8,18 @@
 
 ## 2. 常驻 daemon
 
-- [ ] 2.1 实现启动锁（锁文件 + pid 存活检测 + 过期回收），并发启动测试验证只有一个 daemon 绑定端口 <!-- comet-task:627002aa-d98c-493d-8278-b05562c0666d -->
-- [ ] 2.2 实现 HTTP API 服务（健康检查 + 命令路由入口），验证 curl 健康检查返回 ok <!-- comet-task:2cf57575-7d35-4f1d-9566-35e698f40d7a -->
-- [ ] 2.3 实现桥接 WS 端口监听与握手占位，验证 WebSocket 客户端握手成功 <!-- comet-task:5faf1b78-9cba-40e8-9dfe-392d2de93f0e -->
-- [ ] 2.4 实现 daemon 生命周期命令（status/restart/stop），验证 status 输出运行状态与端口 <!-- comet-task:772e0432-8c9a-4e00-9dad-024b87ff7f9c -->
+- [x] 2.1 实现启动锁（锁文件 + pid 存活检测 + 过期回收），并发启动测试验证只有一个 daemon 绑定端口 <!-- comet-task:627002aa-d98c-493d-8278-b05562c0666d -->
+- [x] 2.2 实现 HTTP API 服务（健康检查 + 命令路由入口），验证 curl 健康检查返回 ok <!-- comet-task:2cf57575-7d35-4f1d-9566-35e698f40d7a -->
+- [x] 2.3 实现桥接 WS 端口监听与握手占位，验证 WebSocket 客户端握手成功 <!-- comet-task:5faf1b78-9cba-40e8-9dfe-392d2de93f0e -->
+- [x] 2.4 实现 daemon 生命周期命令（status/restart/stop），验证 status 输出运行状态与端口 <!-- comet-task:772e0432-8c9a-4e00-9dad-024b87ff7f9c -->
 
 ## 3. ADB 后端与路由抽象
 
-- [ ] 3.1 实现 adb 探测链（配置 → 环境变量 → PATH → 常见安装路径），单元测试覆盖优先级与缺失时的指引性错误 <!-- comet-task:ba46e25e-fea6-4c1c-9dbd-8bce5a2f2a8a -->
-- [ ] 3.2 实现设备枚举（解析 `adb devices -l`），验证 `devices` 列出 MuMu 模拟器 127.0.0.1:5555 且状态在线 <!-- comet-task:5d2b80ab-3e3b-496a-a868-725b8373dcc6 -->
-- [ ] 3.3 实现 `connect host:port`，验证连接后设备出现在枚举结果中 <!-- comet-task:ede50616-6063-4c3d-9503-d5c2870b415b -->
-- [ ] 3.4 实现 `--device` 目标选择与多设备歧义错误，验证两台在线设备未指定时输出候选列表 <!-- comet-task:7cf82c41-e766-45ff-bb94-9841f81d5d1d -->
-- [ ] 3.5 实现后端抽象层（统一后端接口 + 设备记录后端类型 + 命令路由，预留 app-bridge 类型），单元测试验证 adb 后端路由 <!-- comet-task:1b9f0a2d-fe58-4cce-bf3f-30e40613daa6 -->
+- [x] 3.1 实现 adb 探测链（配置 → 环境变量 → PATH → 常见安装路径），单元测试覆盖优先级与缺失时的指引性错误 <!-- comet-task:ba46e25e-fea6-4c1c-9dbd-8bce5a2f2a8a -->
+- [x] 3.2 实现设备枚举（解析 `adb devices -l`），验证 `devices` 列出 MuMu 模拟器 127.0.0.1:5555 且状态在线 <!-- comet-task:5d2b80ab-3e3b-496a-a868-725b8373dcc6 -->
+- [x] 3.3 实现 `connect host:port`，验证连接后设备出现在枚举结果中 <!-- comet-task:ede50616-6063-4c3d-9503-d5c2870b415b -->
+- [x] 3.4 实现 `--device` 目标选择与多设备歧义错误，验证两台在线设备未指定时输出候选列表 <!-- comet-task:7cf82c41-e766-45ff-bb94-9841f81d5d1d -->
+- [x] 3.5 实现后端抽象层（统一后端接口 + 设备记录后端类型 + 命令路由，预留 app-bridge 类型），单元测试验证 adb 后端路由 <!-- comet-task:1b9f0a2d-fe58-4cce-bf3f-30e40613daa6 -->
 
 ## 4. 设备控制命令
 

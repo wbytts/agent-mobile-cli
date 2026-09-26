@@ -1,7 +1,8 @@
 //! adb 可执行文件封装：探测链与子进程调用（design.md 决策 2/3）。
 // TODO(接线): CLI/daemon 命令接线后移除本行（参考 ui.rs 约定，避免组 2-4 接线前 dead_code 警告）。
-#![allow(dead_code)]
-use crate::backend::{BResult, BackendKind, ConnectionKind, DeviceRecord, DeviceState};
+use crate::backend::{
+    BResult, BackendKind, ConnectionKind, DeviceRecord, DeviceState, ShellResult,
+};
 use crate::config::Config;
 use crate::output::ErrorBody;
 use std::io::Read;
@@ -52,8 +53,75 @@ impl Adb {
         }
     }
 
-    /// 基础子进程调用：收集 stdout/stderr，超时 kill，非零退出转 AdbError。
+    /// `adb -s <device> shell <cmd>`：cmd 单字符串透传到设备端 shell，
+    /// 经退出码标记包装返回远端真实退出码（stdout/stderr 分离收集）。
+    pub fn shell(&self, device: &str, cmd: &str, timeout: Duration) -> BResult<ShellResult> {
+        let wrapped = format!("{cmd} ; echo {EXIT_MARKER}$?");
+        let out = self.spawn_collect(&["-s", device, "shell", &wrapped], timeout)?;
+        if out.code != Some(0) {
+            return Err(classify_failure(
+                &format!("adb -s {device} shell {cmd}"),
+                &out,
+            ));
+        }
+        let stdout = String::from_utf8_lossy(&out.stdout).into_owned();
+        let (body, code) = strip_exit_marker(&stdout);
+        let exit_code = code.ok_or_else(|| {
+            ErrorBody::adb_error(
+                format!("adb -s {device} shell 输出缺少退出码标记"),
+                Some(serde_json::json!({ "stdout": body })),
+            )
+        })?;
+        Ok(ShellResult {
+            stdout: body,
+            stderr: String::from_utf8_lossy(&out.stderr).into_owned(),
+            exit_code,
+        })
+    }
+
+    /// `adb -s <device> exec-out <args>`：返回原始 stdout 字节，
+    /// 用于截图等二进制输出场景（exec-out 不经 PTY，不会损坏换行）。
+    pub fn exec_out(&self, device: &str, args: &[&str], timeout: Duration) -> BResult<Vec<u8>> {
+        let mut full: Vec<&str> = vec!["-s", device, "exec-out"];
+        full.extend_from_slice(args);
+        let out = self.spawn_collect(&full, timeout)?;
+        if out.code != Some(0) {
+            return Err(classify_failure(&format!("adb {}", full.join(" ")), &out));
+        }
+        Ok(out.stdout)
+    }
+
+    /// `adb -s <device> pull <remote> <local>`：拉取设备文件到本地。
+    pub fn pull(&self, device: &str, remote: &str, local: &Path, timeout: Duration) -> BResult<()> {
+        let local_str = local.to_string_lossy().into_owned();
+        let out = self.spawn_collect(&["-s", device, "pull", remote, &local_str], timeout)?;
+        if out.code != Some(0) {
+            return Err(classify_failure(
+                &format!("adb -s {device} pull {remote}"),
+                &out,
+            ));
+        }
+        Ok(())
+    }
+
+    /// 设备相关命令透传（自动补 `-s <device>`），返回 stdout 文本。
+    pub fn run_on(&self, device: &str, args: &[&str], timeout: Duration) -> BResult<String> {
+        let mut full: Vec<&str> = vec!["-s", device];
+        full.extend_from_slice(args);
+        self.run(&full, timeout)
+    }
+
+    /// 基础子进程调用：收集 stdout/stderr，超时 kill，非零退出转结构化错误。
     fn run(&self, args: &[&str], timeout: Duration) -> BResult<String> {
+        let out = self.spawn_collect(args, timeout)?;
+        if out.code != Some(0) {
+            return Err(classify_failure(&format!("adb {}", args.join(" ")), &out));
+        }
+        Ok(String::from_utf8_lossy(&out.stdout).into_owned())
+    }
+
+    /// 启动 adb 子进程并排空管道：超时 kill 转 Timeout，spawn/wait 失败转 IoError。
+    fn spawn_collect(&self, args: &[&str], timeout: Duration) -> BResult<RawOutput> {
         let mut child = Command::new(&self.path)
             .args(args)
             .stdin(Stdio::null())
@@ -98,22 +166,56 @@ impl Adb {
             }
         };
 
-        let stdout = String::from_utf8_lossy(&out_thread.join().unwrap_or_default()).into_owned();
-        let stderr = String::from_utf8_lossy(&err_thread.join().unwrap_or_default()).into_owned();
-        if !status.success() {
-            return Err(ErrorBody::adb_error(
-                format!(
-                    "adb {} 退出码 {}",
-                    args.join(" "),
-                    status.code().unwrap_or(-1)
-                ),
-                Some(serde_json::json!({
-                    "stdout": stdout.trim(),
-                    "stderr": stderr.trim(),
-                })),
-            ));
+        Ok(RawOutput {
+            stdout: out_thread.join().unwrap_or_default(),
+            stderr: err_thread.join().unwrap_or_default(),
+            code: status.code(),
+        })
+    }
+}
+
+/// shell 退出码标记：追加 `; echo <标记>$?` 取回远端命令真实退出码
+///（adb shell 自身退出码只反映传输层，不反映远端命令结果）。
+const EXIT_MARKER: &str = "__AMC_EXIT__";
+
+/// adb 子进程原始输出：保留字节以支持 exec-out 二进制场景。
+struct RawOutput {
+    stdout: Vec<u8>,
+    stderr: Vec<u8>,
+    /// None 表示进程被信号终止。
+    code: Option<i32>,
+}
+
+/// 非零退出分类（design.md 决策 7）：stderr/stdout 命中设备离线/未找到特征
+/// 时转 DeviceOffline/DeviceNotFound 结构化错误，其余为 AdbError。
+fn classify_failure(desc: &str, out: &RawOutput) -> ErrorBody {
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    let haystack = format!("{stdout}\n{stderr}").to_lowercase();
+    if haystack.contains("device offline") {
+        ErrorBody::device_offline(format!("{desc} 失败：设备离线"))
+    } else if haystack.contains("not found") {
+        ErrorBody::device_not_found(format!("{desc} 失败：设备不存在或未连接"))
+    } else {
+        ErrorBody::adb_error(
+            format!("{desc} 退出码 {}", out.code.unwrap_or(-1)),
+            Some(serde_json::json!({
+                "stdout": stdout.trim(),
+                "stderr": stderr.trim(),
+            })),
+        )
+    }
+}
+
+/// 剥离 shell 输出尾部的退出码标记，返回（命令原始输出, 退出码）。
+fn strip_exit_marker(stdout: &str) -> (String, Option<i32>) {
+    match stdout.rfind(EXIT_MARKER) {
+        Some(pos) => {
+            let body = &stdout[..pos];
+            let code = stdout[pos + EXIT_MARKER.len()..].trim().parse::<i32>().ok();
+            (body.to_string(), code)
         }
-        Ok(stdout)
+        None => (stdout.to_string(), None),
     }
 }
 
@@ -349,5 +451,71 @@ mod tests {
             assert!(e.message.contains("platform-tools"));
             assert!(e.message.contains("adb_path"));
         }
+    }
+
+    // ---- 组 4：离线/未找到错误分类 ----
+
+    #[test]
+    fn classify_device_offline_from_stderr() {
+        let out = RawOutput {
+            stdout: Vec::new(),
+            stderr: b"error: device offline".to_vec(),
+            code: Some(1),
+        };
+        let e = classify_failure("adb -s d shell x", &out);
+        assert_eq!(e.code, crate::output::ErrorCode::DeviceOffline);
+    }
+
+    #[test]
+    fn classify_device_not_found_from_stderr() {
+        let out = RawOutput {
+            stdout: Vec::new(),
+            stderr: b"adb: device 'fake-serial-9999' not found".to_vec(),
+            code: Some(1),
+        };
+        let e = classify_failure("adb -s d shell x", &out);
+        assert_eq!(e.code, crate::output::ErrorCode::DeviceNotFound);
+    }
+
+    #[test]
+    fn classify_generic_failure_as_adb_error() {
+        let out = RawOutput {
+            stdout: b"some output".to_vec(),
+            stderr: b"permission denied".to_vec(),
+            code: Some(2),
+        };
+        let e = classify_failure("adb -s d shell x", &out);
+        assert_eq!(e.code, crate::output::ErrorCode::AdbError);
+    }
+
+    // ---- 组 4：shell 退出码标记解析 ----
+
+    #[test]
+    fn strip_exit_marker_parses_trailing_code() {
+        let (body, code) = strip_exit_marker("hello\n__AMC_EXIT__0\n");
+        assert_eq!(body, "hello\n");
+        assert_eq!(code, Some(0));
+    }
+
+    #[test]
+    fn strip_exit_marker_parses_nonzero_code() {
+        let (body, code) = strip_exit_marker("ls: x: No such file or directory\n__AMC_EXIT__1\n");
+        assert_eq!(code, Some(1));
+        assert!(body.contains("No such file"));
+    }
+
+    #[test]
+    fn strip_exit_marker_handles_missing_marker() {
+        let (body, code) = strip_exit_marker("no marker here");
+        assert_eq!(body, "no marker here");
+        assert_eq!(code, None);
+    }
+
+    #[test]
+    fn strip_exit_marker_glued_to_output_without_newline() {
+        // 命令输出不以换行结尾时标记与其粘连，仍应正确拆分。
+        let (body, code) = strip_exit_marker("hi__AMC_EXIT__42\n");
+        assert_eq!(body, "hi");
+        assert_eq!(code, Some(42));
     }
 }

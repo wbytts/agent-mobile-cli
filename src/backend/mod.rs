@@ -10,9 +10,9 @@ use std::path::PathBuf;
 pub type BResult<T> = Result<T, ErrorBody>;
 
 // TODO(组4接线后移除): 过渡 allow，组 4 CLI 接线后统一清理
-#[allow(dead_code)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "kebab-case")]
+#[allow(dead_code)] // AppBridge 为 design.md 决策 10 预留的后端类型位（change init-app-bridge 使用）
 pub enum BackendKind {
     Adb,
     AppBridge,
@@ -27,9 +27,9 @@ pub enum DeviceState {
 }
 
 // TODO(组4接线后移除): 过渡 allow，组 4 CLI 接线后统一清理
-#[allow(dead_code)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "lowercase")]
+#[allow(dead_code)] // Bridge 为桥接设备连接方式预留（change init-app-bridge 使用）
 pub enum ConnectionKind {
     Usb,
     Network,
@@ -46,8 +46,8 @@ pub struct DeviceRecord {
 }
 
 // TODO(组4接线后移除): 过渡 allow，组 4 CLI 接线后统一清理
-#[allow(dead_code)]
 #[derive(Debug, Clone, PartialEq)]
+#[allow(dead_code)] // executor 层解引用后仅传 Coord；Ref 为防御性契约位（backend 收到即 not_supported）
 pub enum TapTarget {
     Coord(i32, i32),
     Ref(String),
@@ -62,7 +62,7 @@ pub struct ShellResult {
 
 /// 统一后端接口：控制命令经该接口路由到目标设备所属后端。
 // TODO(组4接线后移除): 过渡 allow，组 4 CLI 接线后统一清理
-#[allow(dead_code)]
+#[allow(dead_code)] // kind() 在多后端路由时启用（change init-app-bridge）
 pub trait Backend: Send + Sync {
     fn kind(&self) -> BackendKind;
     fn devices(&self) -> BResult<Vec<DeviceRecord>>;

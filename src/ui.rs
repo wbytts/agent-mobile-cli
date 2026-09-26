@@ -1,6 +1,5 @@
 //! 屏幕 UI 快照：uiautomator XML 简化树与 @eN 元素引用（design.md 决策 4）。
 // TODO(接线): CLI snapshot 命令接线后移除本行（当前仅测试引用，避免 dead_code 警告）。
-#![allow(dead_code)]
 
 use quick_xml::events::Event;
 use quick_xml::Reader;

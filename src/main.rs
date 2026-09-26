@@ -3,6 +3,7 @@ mod backend;
 mod cli;
 mod config;
 mod daemon;
+mod exec;
 mod output;
 mod ui;
 
@@ -61,11 +62,16 @@ fn run(command: cli::Command) -> Output {
             }
         }
         _ => {
-            // 其他命令先自动确保 daemon（任务 2.2）；实际执行由组 3/4 接入
+            // 设备命令：确保 daemon 后把原始参数转发给 daemon 执行（design.md 决策 1/2）
             if let Err(e) = daemon::ensure_daemon(&cfg) {
                 return err_output(e);
             }
-            Output::failure(ErrorCode::NotSupported, "该命令将在后续任务实现", None)
+            let args: Vec<String> = std::env::args().skip(1).collect();
+            let cwd = std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
+            match daemon::post_cmd(cfg.http_port, &args, &cwd) {
+                Ok(out) => out,
+                Err(e) => err_output(e),
+            }
         }
     }
 }
