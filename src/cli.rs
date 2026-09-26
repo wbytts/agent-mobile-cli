@@ -94,7 +94,7 @@ pub enum Command {
         #[arg(long)]
         device: Option<String>,
     },
-    /// 在设备上执行 shell 命令
+    /// 在设备上执行 shell 命令（注意：--device 等选项需写在 cmd 之前）
     Shell {
         #[arg(trailing_var_arg = true, required = true)]
         cmd: Vec<String>,

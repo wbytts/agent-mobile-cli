@@ -143,6 +143,11 @@ impl DaemonState {
                 Ok(json!({ "device": dev.id, "logcat": out }))
             }
             Command::Shell { cmd, device } => {
+                if cmd.iter().any(|a| a == "--device") {
+                    return Err(ErrorBody::usage(
+                        "shell 的 --device 等选项需写在命令之前：agent-mobile-cli shell --device <serial> <cmd...>",
+                    ));
+                }
                 let dev = self.resolve(device.as_deref())?;
                 let out = self.backend()?.shell(&dev.id, cmd)?;
                 Ok(json!({

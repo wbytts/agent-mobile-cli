@@ -34,9 +34,9 @@
 
 ## 5. 分发与 Agent 文档
 
-- [ ] 5.1 实现 npm wrapper（package.json + postinstall 按平台定位二进制），验证本地打包安装后 `agent-mobile-cli --version` 可执行 <!-- comet-task:93f996b8-1581-4ea5-8dd5-b72e9f52f4c6 -->
-- [ ] 5.2 编写 `skills/agent-mobile-cli/SKILL.md`（覆盖全部命令、选项与典型 SOP），验证文档中每条命令与已实现行为一致 <!-- comet-task:92ae8a59-b613-45e5-a3b3-6ef4fc8bff5d -->
-- [ ] 5.3 编写 README（安装、快速自检、命令速览），验证快速自检段落命令实跑通过 <!-- comet-task:e1cf9c74-821c-4df8-bd26-3d743e05b014 -->
+- [x] 5.1 实现 npm wrapper（package.json + postinstall 按平台定位二进制），验证本地打包安装后 `agent-mobile-cli --version` 可执行 <!-- comet-task:93f996b8-1581-4ea5-8dd5-b72e9f52f4c6 -->
+- [x] 5.2 编写 `skills/agent-mobile-cli/SKILL.md`（覆盖全部命令、选项与典型 SOP），验证文档中每条命令与已实现行为一致 <!-- comet-task:92ae8a59-b613-45e5-a3b3-6ef4fc8bff5d -->
+- [x] 5.3 编写 README（安装、快速自检、命令速览），验证快速自检段落命令实跑通过 <!-- comet-task:e1cf9c74-821c-4df8-bd26-3d743e05b014 -->
 
 ## 6. 端到端验收
 

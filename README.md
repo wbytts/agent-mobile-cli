@@ -48,7 +48,7 @@ agent-mobile-cli screenshot [--out shot.png]
 agent-mobile-cli apps [--filter xxx] [--all]
 agent-mobile-cli launch|stop <package>
 agent-mobile-cli logcat [--lines 100] [--tag T] [--level E]
-agent-mobile-cli shell <cmd...>
+agent-mobile-cli shell [--device <serial>] <cmd...>   # 选项需写在 cmd 之前
 agent-mobile-cli daemon-status|daemon-restart|daemon-stop
 ```
 

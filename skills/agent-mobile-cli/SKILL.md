@@ -51,7 +51,7 @@ agent-mobile-cli apps --filter settings --device <serial>      # 已安装应用
 agent-mobile-cli launch com.android.settings --device <serial>
 agent-mobile-cli stop com.android.settings --device <serial>
 agent-mobile-cli logcat --lines 50 --tag App --level E --device <serial>
-agent-mobile-cli shell getprop ro.product.model --device <serial>   # 返回 stdout/stderr/exit_code
+agent-mobile-cli shell --device <serial> getprop ro.product.model   # 返回 stdout/stderr/exit_code（选项需写在 cmd 之前）
 ```
 
 ## 典型 SOP

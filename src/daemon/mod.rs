@@ -77,7 +77,12 @@ pub fn ensure_daemon(config: &Config) -> BResult<()> {
 /// [`ensure_daemon`] 的实现，锁目录可注入（测试用临时目录，避免污染用户配置目录）。
 fn ensure_daemon_in(config: &Config, dir: &std::path::Path) -> BResult<()> {
     if health_check(config.http_port) {
-        return Ok(());
+        // 版本守卫：daemon 版本与当前二进制不一致（升级后残留旧 daemon）时自动接管
+        if daemon_version(config.http_port).as_deref() == Some(env!("CARGO_PKG_VERSION")) {
+            return Ok(());
+        }
+        let _ = stop(config);
+        wait_daemon_gone_in(dir, Duration::from_secs(10))?;
     }
     // 配置端口不通但锁内 daemon 在其他端口健康存活：端口配置漂移，
     // 直接给出指引，而不是再拉一个 daemon 造成端口冲突
@@ -226,6 +231,34 @@ pub fn health_check(port: u16) -> bool {
         .and_then(|body| serde_json::from_str::<Value>(&body).ok())
         .and_then(|v| v.get("ok")?.as_bool())
         .unwrap_or(false)
+}
+
+/// GET /health 返回的 daemon 版本（版本守卫：升级后残留旧 daemon 时自动接管）。
+fn daemon_version(port: u16) -> Option<String> {
+    let body = http_request(port, "GET", "/health", None, Duration::from_millis(500)).ok()?;
+    let v: Value = serde_json::from_str(&body).ok()?;
+    Some(v.get("version")?.as_str()?.to_owned())
+}
+
+/// 等待旧 daemon 退出：以「锁文件消失或锁内 pid 退出」为准（每 100ms 轮询）。
+/// 健康检查在 /cmd 有在飞长命令时会持续通过，不能作为退出判据。
+pub fn wait_daemon_gone_in(dir: &std::path::Path, timeout: Duration) -> BResult<()> {
+    let deadline = Instant::now() + timeout;
+    loop {
+        let exited = match lock::read_lock(dir) {
+            None => true,
+            Some(info) => !lock::pid_alive(info.pid),
+        };
+        if exited {
+            return Ok(());
+        }
+        if Instant::now() >= deadline {
+            return Err(ErrorBody::timeout(
+                "旧 daemon 未在 10 秒内退出（可能有长命令在飞，可稍后重试 daemon-status 确认）",
+            ));
+        }
+        std::thread::sleep(Duration::from_millis(100));
+    }
 }
 
 /// CLI 侧把原始命令参数转发给 daemon 执行；返回 daemon 的结构化输出。
