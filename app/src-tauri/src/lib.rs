@@ -1,5 +1,7 @@
 //! Agent Mobile Bridge Rust core。
-//! 本阶段仅承载 WebView UI；桥接协议/WS 客户端/QuickJS 沙盒在任务组 4 接入。
+//! QuickJS 脚本沙盒与 Kotlin 插件桥在任务组 3 接入；WS 客户端在任务组 4 接入。
+
+pub mod sandbox;
 
 #[cfg(target_os = "android")]
 fn init_android_logger() {

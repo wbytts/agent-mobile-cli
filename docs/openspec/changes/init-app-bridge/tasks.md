@@ -2,8 +2,8 @@
 
 ## 1. Tauri 工程与构建链
 
-- [ ] 1.1 创建 Tauri 2 Android 工程骨架（含 Gradle/NDK/Rust targets 配置），验证 debug APK 构建成功并在 MuMu 安装启动 <!-- comet-task:567a37b2-c2d7-4a66-afb3-70511fe05d2f -->
-- [ ] 1.2 实现 App 多页诊断 UI（连接页：daemon 地址/配对码输入/扫码入口/连接状态；能力自检页：无障碍权限状态与逐项能力自测；日志页：命令与连接事件），验证三页渲染与状态切换 <!-- comet-task:2e4b6717-d3cf-4794-8296-f4441b6b7291 -->
+- [x] 1.1 创建 Tauri 2 Android 工程骨架（含 Gradle/NDK/Rust targets 配置），验证 debug APK 构建成功并在 MuMu 安装启动 <!-- comet-task:567a37b2-c2d7-4a66-afb3-70511fe05d2f -->
+- [x] 1.2 实现 App 多页诊断 UI（连接页：daemon 地址/配对码输入/扫码入口/连接状态；能力自检页：无障碍权限状态与逐项能力自测；日志页：命令与连接事件），验证三页渲染与状态切换 <!-- comet-task:2e4b6717-d3cf-4794-8296-f4441b6b7291 -->
 
 ## 2. 桥接协议
 
@@ -28,7 +28,8 @@
 
 - [ ] 5.1 实现 `app-bridge` 后端的统一接口（snapshot/tap/swipe/input/screenshot 经 WS 路由），验证对桥接设备执行命令输出结构与 ADB 后端一致 <!-- comet-task:ec4dc356-aefc-4499-8ce7-230b7a487b3d -->
 - [ ] 5.2 实现能力集校验与降级错误，验证对桥接设备执行 shell 返回「不支持」结构化错误 <!-- comet-task:d7b70f80-52cc-4ebf-8672-538918c5f211 -->
-- [ ] 5.3 实现 devices 合并枚举（adb + 桥接设备类型标识），验证两类设备同时在线时均可列出并区分 <!-- comet-task:ea47e93b-5534-41a6-9fbf-e4c5f5bb0766 -->
+- [ ] 5.3 实现 devices 合并枚举（adb + 桥接设备类型标识），验证两类设备同时在线时均可列出并区分 <!-- comet-task:41c1207f-f863-4d14-aea2-7f6f6dd9b8cf -->
+- [ ] 5.4 实现 CLI script 命令（`agent-mobile-cli script <file.js|-> --device <id>`：文件或 stdin 读 JS 源码，经桥接下发 script 消息，输出脚本返回值或异常），验证对桥接设备执行 `mobile.tap` 脚本输出与协议一致 <!-- comet-task:ea47e93b-5534-41a6-9fbf-e4c5f5bb0766 -->
 
 ## 6. 端到端验收
 
