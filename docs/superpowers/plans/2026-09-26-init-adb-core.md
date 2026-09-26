@@ -2,6 +2,7 @@
 change: init-adb-core
 design-doc: docs/openspec/changes/init-adb-core/design.md
 base-ref: 20b4422426ea4223f76ffc0b2d62b7d42cd196e1
+archived-with: 2026-09-26-init-adb-core
 ---
 
 # 实施计划：init-adb-core

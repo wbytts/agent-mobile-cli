@@ -2,6 +2,8 @@
 comet_change: init-adb-core
 role: technical-design
 canonical_spec: openspec
+archived-with: 2026-09-26-init-adb-core
+status: final
 ---
 
 # Design
