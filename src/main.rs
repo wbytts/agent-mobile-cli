@@ -1,6 +1,9 @@
+mod adb;
+mod backend;
 mod cli;
 mod config;
 mod output;
+mod ui;
 
 use clap::Parser;
 use output::{ErrorCode, Output};

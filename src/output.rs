@@ -22,6 +22,54 @@ pub struct ErrorBody {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub details: Option<serde_json::Value>,
 }
+impl ErrorBody {
+    pub fn new(
+        code: ErrorCode,
+        message: impl Into<String>,
+        details: Option<serde_json::Value>,
+    ) -> Self {
+        Self {
+            code,
+            message: message.into(),
+            details,
+        }
+    }
+
+    pub fn device_not_found(message: impl Into<String>) -> Self {
+        Self::new(ErrorCode::DeviceNotFound, message, None)
+    }
+
+    pub fn device_offline(message: impl Into<String>) -> Self {
+        Self::new(ErrorCode::DeviceOffline, message, None)
+    }
+
+    pub fn device_ambiguous(
+        message: impl Into<String>,
+        details: Option<serde_json::Value>,
+    ) -> Self {
+        Self::new(ErrorCode::DeviceAmbiguous, message, details)
+    }
+
+    pub fn not_supported(message: impl Into<String>) -> Self {
+        Self::new(ErrorCode::NotSupported, message, None)
+    }
+
+    pub fn adb_not_found(message: impl Into<String>) -> Self {
+        Self::new(ErrorCode::AdbNotFound, message, None)
+    }
+
+    pub fn timeout(message: impl Into<String>) -> Self {
+        Self::new(ErrorCode::Timeout, message, None)
+    }
+
+    pub fn adb_error(message: impl Into<String>, details: Option<serde_json::Value>) -> Self {
+        Self::new(ErrorCode::AdbError, message, details)
+    }
+
+    pub fn io_error(message: impl Into<String>) -> Self {
+        Self::new(ErrorCode::IoError, message, None)
+    }
+}
 
 #[derive(Debug, Clone, Serialize)]
 pub struct Output {
