@@ -33,4 +33,4 @@
 
 ## 6. 端到端验收
 
-- [ ] 6.1 在 MuMu 执行全链路验收：安装 App → 无障碍授权 → 手动与扫码配对 → devices 可见 → snapshot → 脚本 `mobile.tap` → screenshot → 断线重连恢复 → `pair --reset` 后旧 token 失效，逐项对照 specs 场景通过 <!-- comet-task:09ded594-1ab2-47ba-ac9c-bad71244d5ac -->
+- [x] 6.1 在 MuMu 执行全链路验收：安装 App → 无障碍授权 → 手动与扫码配对 → devices 可见 → snapshot → 脚本 `mobile.tap` → screenshot → 断线重连恢复 → `pair --reset` 后旧 token 失效，逐项对照 specs 场景通过 <!-- comet-task:09ded594-1ab2-47ba-ac9c-bad71244d5ac -->

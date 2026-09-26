@@ -160,7 +160,7 @@ $ADB -s 127.0.0.1:5555 shell settings put secure accessibility_enabled 1
   冷启动自动连接触发条件）；
   `cargo fmt --check`、host 与 `aarch64-linux-android` clippy `-D warnings` 均干净
 - APK 重新构建成功（含 zxing 依赖与前台服务/扫码组件）
-- MuMu 端到端冒烟（`adb reverse tcp:18777 tcp:18777` 让模拟器经 127.0.0.1 访问 host daemon）：
+- MuMu 端到端冒烟：daemon WS 绑 0.0.0.0:18777，App 可直接填 host LAN IP（推荐）；也可 `adb reverse tcp:18777 tcp:18777` 让模拟器经 127.0.0.1 访问：
   - 错误配对码 → UI 显示「配对失败：配对码错误或已失效」（认证失败终态，不再重试）
   - `pair --reset` 后正确配对码 → `bridge:23116PN5BC online`，hello_ack 签发 token 已持久化
   - CLI 桥接执行：`tap`（command 帧）、`snapshot`（uiTree）、`script -` 经沙盒
