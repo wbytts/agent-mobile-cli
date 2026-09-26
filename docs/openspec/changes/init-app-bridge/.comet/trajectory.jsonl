@@ -5,3 +5,4 @@
 {"sequence":5,"timestamp":"2026-09-26T14:10:42.372Z","type":"state_transitioned","runId":"adc0da97-b40a-4851-9780-d1ab0e56906f","data":{"kind":"classic","fromStep":"full.design.document","toStep":"full.build.configure","event":"design-complete","phase":"design","source":"comet-guard"}}
 {"sequence":6,"timestamp":"2026-09-26T14:11:58.446Z","type":"state_transitioned","runId":"adc0da97-b40a-4851-9780-d1ab0e56906f","data":{"kind":"classic-config","field":"tdd_mode","fromStep":"full.build.configure","toStep":"full.build.plan"}}
 {"sequence":7,"timestamp":"2026-09-26T14:13:29.725Z","type":"state_transitioned","runId":"adc0da97-b40a-4851-9780-d1ab0e56906f","data":{"kind":"classic-config","field":"plan","fromStep":"full.build.plan","toStep":"full.build.execute"}}
+{"sequence":8,"timestamp":"2026-09-26T18:22:58.699Z","runId":"adc0da97-b40a-4851-9780-d1ab0e56906f","type":"command_checks_invalidated","data":{"reason":"cold-recovery","scopes":["build","verify"]}}

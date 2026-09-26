@@ -1,8 +1,35 @@
 {
-  "runId": "adc0da97-b40a-4851-9780-d1ab0e56906f",
-  "stateVersion": 2,
-  "trajectoryOffset": 4,
-  "contextHash": "ce550b2af49c8b45aa36ebf05d772e2b237fa9d6931cc10cc39272dcc05235a7",
-  "artifactsHash": "828100e21f6643d29854b6ed962a153bbe0e57defc82ad2e92d04c66af00a0d6",
-  "createdAt": "2026-09-26T14:10:42.143Z"
+ "schemaVersion": 1,
+ "taskIds": [
+  "567a37b2-c2d7-4a66-afb3-70511fe05d2f",
+  "2e4b6717-d3cf-4794-8296-f4441b6b7291",
+  "02e6b5e2-7068-4e61-a243-996aae31e593",
+  "ce233ce2-7f38-4e65-b248-b6edfe45d979",
+  "7cb6921e-aba4-4f43-b531-469b150c5e6b",
+  "545bd128-daa9-419b-b1f5-dcf22cc03965",
+  "40e47a10-0bd3-4527-a23c-052347446c7f",
+  "ba80be11-91c1-434f-b3ed-1a43a25e9e46",
+  "2a32ec5a-deb6-44e6-b589-b8cc6c589273",
+  "a4554601-2865-4c3c-b2f5-c9403c9b061b",
+  "8a12453e-410d-40ae-81f1-9728dec0ade8",
+  "22a11751-6d93-4ed3-b560-514e1cc5f995",
+  "ec4dc356-aefc-4499-8ce7-230b7a487b3d",
+  "d7b70f80-52cc-4ebf-8672-538918c5f211",
+  "41c1207f-f863-4d14-aea2-7f6f6dd9b8cf",
+  "ea47e93b-5534-41a6-9fbf-e4c5f5bb0766",
+  "09ded594-1ab2-47ba-ac9c-bad71244d5ac"
+ ],
+ "stage": "done",
+ "sessionId": "init-app-bridge-build",
+ "evidence": [
+  "cargo test 164+93+93 全绿 + App host 36",
+  "clippy/fmt 干净",
+  "MuMu 端到端逐项实测（含 reset 全流程、沙盒 25s 超时、LAN 直连）",
+  "BridgeReview 3 IMPORTANT+7 MINOR 全修复提交 7945e31"
+ ],
+ "unresolved": [
+  "真机相机扫码待用户配合（真机 adb 192.168.2.5:5555 掉线，需重开无线调试后装 APK）"
+ ],
+ "reviewRounds": 1,
+ "revision": "6b28441e4ad1c630904170a59f546dcb72b03773d7055d5a4b9919a6d3049786"
 }

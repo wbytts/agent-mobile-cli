@@ -51,7 +51,8 @@ base-ref: 8749d16f0ee0b4ad5d55b93d014e5c0f5d39b1c5
 
 - 任务 5.1 `ec4dc356-aefc-4499-8ce7-230b7a487b3d` <!-- comet-task-ref:ec4dc356-aefc-4499-8ce7-230b7a487b3d -->：Backend trait 实现（snapshot/tap/swipe/input/key/screenshot/apps/launch 经 WS 路由），输出结构与 ADB 后端一致。
 - 任务 5.2 `d7b70f80-52cc-4ebf-8672-538918c5f211` <!-- comet-task-ref:d7b70f80-52cc-4ebf-8672-538918c5f211 -->：能力降级（stop/logcat/shell → NOT_SUPPORTED 结构化错误）。
-- 任务 5.3 `ea47e93b-5534-41a6-9fbf-e4c5f5bb0766` <!-- comet-task-ref:ea47e93b-5534-41a6-9fbf-e4c5f5bb0766 -->：devices 合并枚举（adb + bridge 类型标识）。
+- 任务 5.3 `41c1207f-f863-4d14-aea2-7f6f6dd9b8cf` <!-- comet-task-ref:41c1207f-f863-4d14-aea2-7f6f6dd9b8cf -->：devices 合并枚举（adb + bridge 类型标识）。
+- 任务 5.4 `ea47e93b-5534-41a6-9fbf-e4c5f5bb0766` <!-- comet-task-ref:ea47e93b-5534-41a6-9fbf-e4c5f5bb0766 -->：CLI script 命令（文件/stdin 读 JS 经桥接下发，输出脚本返回值或异常）。
   - 三个任务验收：单测 + 主会话双后端在线冒烟。
 
 ## 组 6：端到端验收（主会话）
