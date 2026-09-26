@@ -5,6 +5,8 @@
 
 use std::sync::Arc;
 
+use rquickjs::{Ctx, Exception, Function, Object, Value};
+
 /// 设备能力桥：生产实现经 Tauri 插件调到 Kotlin（Android），单测用 mock。
 ///
 /// 各方法返回 JSON 文本（与 Kotlin 插件 JSObject 序列化结果一致），
@@ -15,11 +17,17 @@ pub trait MobileOps: Send + Sync {
         -> Result<String, String>;
     fn input(&self, text: &str) -> Result<String, String>;
     fn key(&self, key: &str) -> Result<String, String>;
+    /// 返回 `{"xml": "<与 uiautomator dump 同构的 XML>"}`（桥接协议契约，CLI 侧 ui::simplify 复用）。
     fn ui_tree(&self) -> Result<String, String>;
-    /// 返回 JSON 文本，如 `{"png_base64":"..."}`。
+    /// 返回 `{"png_base64": "..."}`。
     fn screenshot(&self) -> Result<String, String>;
-    fn apps(&self) -> Result<String, String>;
+    /// 返回 `{"packages": ["..."]}`；filter 为包名/标签子串（空为不过滤），all 含无启动入口应用。
+    fn apps(&self, filter: Option<&str>, all: bool) -> Result<String, String>;
     fn launch(&self, package: &str) -> Result<String, String>;
+    /// 返回 `{"enabled": bool}`，无障碍服务是否已启用。
+    fn a11y_status(&self) -> Result<String, String>;
+    /// 跳转系统无障碍设置页。
+    fn open_a11y_settings(&self) -> Result<String, String>;
 }
 
 /// QuickJS 沙盒执行器。
@@ -33,8 +41,165 @@ impl Sandbox {
     }
 
     /// 执行脚本并返回其结果（JSON 值）；脚本异常或 `mobile.*` 失败返回 Err。
-    pub fn run(&self, _script: &str) -> Result<serde_json::Value, String> {
-        todo!("沙盒执行未实现")
+    pub fn run(&self, script: &str) -> Result<serde_json::Value, String> {
+        // Runtime/Context 每脚本新建（design.md 决策 2）：脚本间无状态泄漏。
+        let runtime =
+            rquickjs::Runtime::new().map_err(|e| format!("创建 QuickJS Runtime 失败: {e}"))?;
+        let context = rquickjs::Context::full(&runtime)
+            .map_err(|e| format!("创建 QuickJS Context 失败: {e}"))?;
+        context.with(|ctx| {
+            register_mobile(&ctx, &self.ops)?;
+            let value: Value = ctx.eval(script).map_err(|e| script_error(&ctx, e))?;
+            js_value_to_json(&ctx, value)
+        })
+    }
+}
+
+/// 向全局注入 `mobile.*` 八个设备操作函数；桥失败转为 JS 异常。
+fn register_mobile(ctx: &Ctx<'_>, ops: &Arc<dyn MobileOps>) -> Result<(), String> {
+    let mobile = Object::new(ctx.clone()).map_err(|e| format!("创建 mobile 对象失败: {e}"))?;
+
+    macro_rules! bind {
+        ($name:literal, $f:expr) => {
+            mobile
+                .set(
+                    $name,
+                    Function::new(ctx.clone(), $f)
+                        .map_err(|e| format!("注册 {} 失败: {e}", $name))?,
+                )
+                .map_err(|e| format!("绑定 {} 失败: {e}", $name))?
+        };
+    }
+
+    {
+        let ops = ops.clone();
+        bind!("tap", move |ctx: Ctx<'_>, x: f64, y: f64| {
+            call_op(&ctx, ops.tap(x, y))
+        });
+    }
+    {
+        let ops = ops.clone();
+        bind!("swipe", move |ctx: Ctx<'_>,
+                             x1: f64,
+                             y1: f64,
+                             x2: f64,
+                             y2: f64,
+                             duration_ms: f64| {
+            call_op(&ctx, ops.swipe(x1, y1, x2, y2, duration_ms))
+        });
+    }
+    {
+        let ops = ops.clone();
+        bind!("input", move |ctx: Ctx<'_>, text: String| {
+            call_op(&ctx, ops.input(&text))
+        });
+    }
+    {
+        let ops = ops.clone();
+        bind!("key", move |ctx: Ctx<'_>, key: String| {
+            call_op(&ctx, ops.key(&key))
+        });
+    }
+    {
+        let ops = ops.clone();
+        bind!("uiTree", move |ctx: Ctx<'_>| call_op(&ctx, ops.ui_tree()));
+    }
+    {
+        let ops = ops.clone();
+        bind!("screenshot", move |ctx: Ctx<'_>| call_op(
+            &ctx,
+            ops.screenshot()
+        ));
+    }
+    {
+        let ops = ops.clone();
+        bind!("apps", move |ctx: Ctx<'_>,
+                            filter: Option<String>,
+                            all: Option<bool>| {
+            call_op(&ctx, ops.apps(filter.as_deref(), all.unwrap_or(false)))
+        });
+    }
+    {
+        let ops = ops.clone();
+        bind!("launch", move |ctx: Ctx<'_>, package: String| {
+            call_op(&ctx, ops.launch(&package))
+        });
+    }
+
+    ctx.globals()
+        .set("mobile", mobile)
+        .map_err(|e| format!("注入 mobile 全局对象失败: {e}"))
+}
+
+/// 桥返回的 JSON 文本包装：经 `IntoJs` 在调用现场解析为 JS 值，
+/// 规避闭包返回 `Value<'js>` 的生命周期约束。
+struct JsonValue(String);
+
+impl<'js> rquickjs::IntoJs<'js> for JsonValue {
+    fn into_js(self, ctx: &Ctx<'js>) -> rquickjs::Result<Value<'js>> {
+        json_parse(ctx, &self.0)
+    }
+}
+
+/// 桥调用结果：成功返回待解析 JSON；失败抛带消息的 JS 异常。
+fn call_op(ctx: &Ctx<'_>, result: Result<String, String>) -> rquickjs::Result<JsonValue> {
+    match result {
+        Ok(text) => Ok(JsonValue(text)),
+        Err(message) => Err(throw_message(ctx, &message)),
+    }
+}
+
+/// JSON.parse；桥返回的 null 解析为 JS null。
+fn json_parse<'js>(ctx: &Ctx<'js>, text: &str) -> rquickjs::Result<Value<'js>> {
+    let json: Object<'js> = ctx.globals().get("JSON")?;
+    let parse: Function<'js> = json.get("parse")?;
+    parse.call((text,))
+}
+
+/// 构造带消息的 JS Error 异常。
+fn throw_message(ctx: &Ctx<'_>, message: &str) -> rquickjs::Error {
+    match Exception::from_message(ctx.clone(), message) {
+        Ok(exception) => ctx.throw(exception.into_object().into_value()),
+        Err(e) => e,
+    }
+}
+
+/// eval 失败时提取脚本异常消息（含栈）。
+fn script_error(ctx: &Ctx<'_>, error: rquickjs::Error) -> String {
+    if matches!(error, rquickjs::Error::Exception) {
+        let caught = ctx.catch();
+        if let Some(obj) = caught.as_object().cloned() {
+            if let Some(exception) = Exception::from_object(obj) {
+                let message = exception
+                    .message()
+                    .unwrap_or_else(|| "未知异常".to_string());
+                return match exception.stack() {
+                    Some(stack) if !stack.is_empty() => format!("脚本异常: {message}\n{stack}"),
+                    _ => format!("脚本异常: {message}"),
+                };
+            }
+        }
+        return "脚本异常（非 Error 值）".to_string();
+    }
+    format!("脚本执行失败: {error}")
+}
+
+/// JS 值经 JSON.stringify 转 serde_json；undefined 归为 null。
+fn js_value_to_json<'js>(ctx: &Ctx<'js>, value: Value<'js>) -> Result<serde_json::Value, String> {
+    if value.is_undefined() {
+        return Ok(serde_json::Value::Null);
+    }
+    let json: Object = ctx
+        .globals()
+        .get("JSON")
+        .map_err(|e| format!("访问 JSON 全局失败: {e}"))?;
+    let stringify: Function = json
+        .get("stringify")
+        .map_err(|e| format!("访问 JSON.stringify 失败: {e}"))?;
+    let text: Option<String> = stringify.call((value,)).map_err(|e| script_error(ctx, e))?;
+    match text {
+        None => Ok(serde_json::Value::Null),
+        Some(text) => serde_json::from_str(&text).map_err(|e| format!("脚本结果序列化失败: {e}")),
     }
 }
 
@@ -61,7 +226,7 @@ mod tests {
         fn new() -> Self {
             Self {
                 calls: Mutex::new(Vec::new()),
-                ui_tree_json: r#"{"text":"设置","class":"TextView","bounds":[0,0,10,10],"clickable":true,"children":[]}"#.to_string(),
+                ui_tree_json: r#"{"xml":"<?xml version=\"1.0\" encoding=\"UTF-8\"?><hierarchy><node text=\"设置\" class=\"TextView\" bounds=\"[0,0][10,10]\" clickable=\"true\"/></hierarchy>"}"#.to_string(),
                 screenshot_json: r#"{"png_base64":"aGVsbG8="}"#.to_string(),
                 fail_on: None,
             }
@@ -121,12 +286,22 @@ mod tests {
             self.record("screenshot", vec![])?;
             Ok(self.screenshot_json.clone())
         }
-        fn apps(&self) -> Result<String, String> {
-            self.record("apps", vec![])?;
-            Ok(r#"{"apps":[{"label":"设置","package":"com.android.settings"}]}"#.to_string())
+        fn apps(&self, filter: Option<&str>, all: bool) -> Result<String, String> {
+            self.record(
+                "apps",
+                vec![filter.unwrap_or("").to_string(), all.to_string()],
+            )?;
+            Ok(r#"{"packages":["com.android.settings"]}"#.to_string())
         }
         fn launch(&self, package: &str) -> Result<String, String> {
             self.record("launch", vec![package.to_string()])
+        }
+        fn a11y_status(&self) -> Result<String, String> {
+            self.record("a11yStatus", vec![])?;
+            Ok(r#"{"enabled":true}"#.to_string())
+        }
+        fn open_a11y_settings(&self) -> Result<String, String> {
+            self.record("openA11ySettings", vec![])
         }
     }
 
@@ -200,9 +375,9 @@ mod tests {
     fn ui_tree_result_available_as_object() {
         let ops = Arc::new(MockOps::new());
         let result = sandbox_with(ops)
-            .run("mobile.uiTree().text")
+            .run("mobile.uiTree().xml.includes(\"设置\")")
             .expect("脚本应成功");
-        assert_eq!(result, serde_json::json!("设置"));
+        assert_eq!(result, serde_json::json!(true));
     }
 
     #[test]
@@ -222,10 +397,7 @@ mod tests {
                     .map(n => typeof mobile[n])"#,
             )
             .expect("脚本应成功");
-        assert_eq!(
-            result,
-            serde_json::json!(vec!["function"; 8])
-        );
+        assert_eq!(result, serde_json::json!(vec!["function"; 8]));
     }
 
     #[test]
@@ -250,7 +422,10 @@ mod tests {
             vec![
                 ("input".to_string(), vec!["你好".to_string()]),
                 ("key".to_string(), vec!["back".to_string()]),
-                ("launch".to_string(), vec!["com.android.settings".to_string()]),
+                (
+                    "launch".to_string(),
+                    vec!["com.android.settings".to_string()]
+                ),
             ]
         );
     }

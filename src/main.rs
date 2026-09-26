@@ -66,6 +66,41 @@ fn run(command: cli::Command) -> Output {
                 Err(e) => err_output(e),
             }
         }
+        Script { ref source, .. } => {
+            // 设备命令转发模型（design.md 决策 1/2）；"-" 时 daemon 无法访问发起侧 stdin，
+            // CLI 侧读入脚本内容随请求携带（http 层注入命令后路由桥接后端）。
+            if let Err(e) = daemon::ensure_daemon(&cfg) {
+                return err_output(e);
+            }
+            let stdin_data = if source == "-" {
+                let mut buf = String::new();
+                match std::io::Read::read_to_string(&mut std::io::stdin(), &mut buf) {
+                    Ok(_) if !buf.trim().is_empty() => Some(buf),
+                    Ok(_) => {
+                        return Output::failure(
+                            ErrorCode::Usage,
+                            "script - 从 stdin 读取到空内容".to_string(),
+                            None,
+                        )
+                    }
+                    Err(e) => {
+                        return Output::failure(
+                            ErrorCode::IoError,
+                            format!("读取 stdin 失败: {e}"),
+                            None,
+                        )
+                    }
+                }
+            } else {
+                None
+            };
+            let args: Vec<String> = std::env::args().skip(1).collect();
+            let cwd = std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
+            match daemon::post_cmd(cfg.http_port, &args, &cwd, stdin_data.as_deref()) {
+                Ok(out) => out,
+                Err(e) => err_output(e),
+            }
+        }
         _ => {
             // 设备命令：确保 daemon 后把原始参数转发给 daemon 执行（design.md 决策 1/2）
             if let Err(e) = daemon::ensure_daemon(&cfg) {
@@ -73,7 +108,7 @@ fn run(command: cli::Command) -> Output {
             }
             let args: Vec<String> = std::env::args().skip(1).collect();
             let cwd = std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
-            match daemon::post_cmd(cfg.http_port, &args, &cwd) {
+            match daemon::post_cmd(cfg.http_port, &args, &cwd, None) {
                 Ok(out) => out,
                 Err(e) => err_output(e),
             }

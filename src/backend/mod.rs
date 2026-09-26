@@ -2,6 +2,7 @@
 //! 本文件只定义类型与接口，实现由 adb / app-bridge 后端模块提供。
 
 pub mod adb;
+pub mod bridge;
 use crate::output::ErrorBody;
 use serde::Serialize;
 use std::path::Path;
@@ -11,7 +12,6 @@ pub type BResult<T> = Result<T, ErrorBody>;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "kebab-case")]
-#[allow(dead_code)] // AppBridge 为 design.md 决策 10 预留的后端类型位（change init-app-bridge 使用）
 pub enum BackendKind {
     Adb,
     AppBridge,
@@ -27,7 +27,6 @@ pub enum DeviceState {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "lowercase")]
-#[allow(dead_code)] // Bridge 为桥接设备连接方式预留（change init-app-bridge 使用）
 pub enum ConnectionKind {
     Usb,
     Network,
@@ -58,7 +57,6 @@ pub struct ShellResult {
 }
 
 /// 统一后端接口：控制命令经该接口路由到目标设备所属后端。
-#[allow(dead_code)] // kind() 在多后端路由时启用（change init-app-bridge）
 pub trait Backend: Send + Sync {
     fn kind(&self) -> BackendKind;
     fn devices(&self) -> BResult<Vec<DeviceRecord>>;
@@ -80,6 +78,8 @@ pub trait Backend: Send + Sync {
     fn apps(&self, device: &str, filter: Option<&str>, all: bool) -> BResult<Vec<String>>;
     fn launch(&self, device: &str, package: &str) -> BResult<()>;
     fn stop(&self, device: &str, package: &str) -> BResult<()>;
+    /// 在设备上执行 JS 脚本（桥接 QuickJS 沙盒能力；ADB 后端返回 not_supported）。
+    fn script(&self, device: &str, source: &str) -> BResult<serde_json::Value>;
     fn logcat(
         &self,
         device: &str,

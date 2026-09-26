@@ -52,6 +52,7 @@ agent-mobile-cli launch com.android.settings --device <serial>
 agent-mobile-cli stop com.android.settings --device <serial>
 agent-mobile-cli logcat --lines 50 --tag App --level E --device <serial>
 agent-mobile-cli shell --device <serial> getprop ro.product.model   # 返回 stdout/stderr/exit_code（选项需写在 cmd 之前）
+agent-mobile-cli script <file.js|-> --device bridge:<name>          # 桥接设备执行 JS（mobile.* API），ADB 设备返回 NOT_SUPPORTED
 ```
 
 ## 典型 SOP

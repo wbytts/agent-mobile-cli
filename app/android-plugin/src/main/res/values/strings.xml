@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="bridge_service_label">Agent Mobile Bridge</string>
+    <string name="bridge_service_description">为 agent-mobile-cli 提供设备操作桥接：点击、滑动、UI 树读取、截图与文本输入。</string>
+</resources>

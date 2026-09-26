@@ -1,0 +1,50 @@
+1<?xml version="1.0" encoding="utf-8"?>
+2<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+3    package="com.agentmobile.bridge" >
+4
+5    <uses-sdk android:minSdkVersion="24" />
+6
+7    <!-- 查询可启动应用列表（apps 能力） -->
+8    <queries>
+8-->/Users/wby/codes/github/agent-mobile-cli/app/android-plugin/src/main/AndroidManifest.xml:5:5-10:15
+9        <intent>
+9-->/Users/wby/codes/github/agent-mobile-cli/app/android-plugin/src/main/AndroidManifest.xml:6:9-9:18
+10            <action android:name="android.intent.action.MAIN" />
+10-->/Users/wby/codes/github/agent-mobile-cli/app/android-plugin/src/main/AndroidManifest.xml:7:13-65
+10-->/Users/wby/codes/github/agent-mobile-cli/app/android-plugin/src/main/AndroidManifest.xml:7:21-62
+11
+12            <category android:name="android.intent.category.LAUNCHER" />
+12-->/Users/wby/codes/github/agent-mobile-cli/app/android-plugin/src/main/AndroidManifest.xml:8:13-73
+12-->/Users/wby/codes/github/agent-mobile-cli/app/android-plugin/src/main/AndroidManifest.xml:8:23-70
+13        </intent>
+14    </queries>
+15
+16    <application>
+16-->/Users/wby/codes/github/agent-mobile-cli/app/android-plugin/src/main/AndroidManifest.xml:12:5-25:19
+17        <service
+17-->/Users/wby/codes/github/agent-mobile-cli/app/android-plugin/src/main/AndroidManifest.xml:13:9-24:19
+18            android:name="com.agentmobile.bridge.BridgeAccessibilityService"
+18-->/Users/wby/codes/github/agent-mobile-cli/app/android-plugin/src/main/AndroidManifest.xml:14:13-55
+19            android:exported="true"
+19-->/Users/wby/codes/github/agent-mobile-cli/app/android-plugin/src/main/AndroidManifest.xml:16:13-36
+20            android:label="@string/bridge_service_label"
+20-->/Users/wby/codes/github/agent-mobile-cli/app/android-plugin/src/main/AndroidManifest.xml:15:13-57
+21            android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE" >
+21-->/Users/wby/codes/github/agent-mobile-cli/app/android-plugin/src/main/AndroidManifest.xml:17:13-79
+22            <intent-filter>
+22-->/Users/wby/codes/github/agent-mobile-cli/app/android-plugin/src/main/AndroidManifest.xml:18:13-20:29
+23                <action android:name="android.accessibilityservice.AccessibilityService" />
+23-->/Users/wby/codes/github/agent-mobile-cli/app/android-plugin/src/main/AndroidManifest.xml:19:17-92
+23-->/Users/wby/codes/github/agent-mobile-cli/app/android-plugin/src/main/AndroidManifest.xml:19:25-89
+24            </intent-filter>
+25
+26            <meta-data
+26-->/Users/wby/codes/github/agent-mobile-cli/app/android-plugin/src/main/AndroidManifest.xml:21:13-23:79
+27                android:name="android.accessibilityservice"
+27-->/Users/wby/codes/github/agent-mobile-cli/app/android-plugin/src/main/AndroidManifest.xml:22:17-60
+28                android:resource="@xml/bridge_accessibility_service_config" />
+28-->/Users/wby/codes/github/agent-mobile-cli/app/android-plugin/src/main/AndroidManifest.xml:23:17-76
+29        </service>
+30    </application>
+31
+32</manifest>

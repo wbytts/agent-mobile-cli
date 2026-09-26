@@ -11,6 +11,9 @@ mod adb;
 #[path = "../src/backend/mod.rs"]
 mod backend;
 #[allow(dead_code)]
+#[path = "../src/bridge_proto.rs"]
+mod bridge_proto;
+#[allow(dead_code)]
 #[path = "../src/config.rs"]
 mod config;
 #[allow(dead_code)]
@@ -18,6 +21,9 @@ mod config;
 mod output;
 #[path = "../src/ui.rs"]
 mod ui;
+// backend::bridge 依赖的注册表子树（crate:: 路径与二进制目标一致）
+#[path = "daemon/mod.rs"]
+mod daemon;
 use backend::adb::AdbBackend;
 use backend::{Backend, TapTarget};
 use output::ErrorCode;

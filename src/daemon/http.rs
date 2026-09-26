@@ -57,6 +57,9 @@ struct CmdRequest {
     /// 命令发起侧 CLI 的工作目录（相对路径输出以其为基准）
     #[serde(default)]
     cwd: Option<String>,
+    /// `script -` 的 stdin 脚本内容：发起侧 CLI 读入随请求携带（daemon 无法访问发起侧 stdin）
+    #[serde(default)]
+    script_stdin: Option<String>,
 }
 
 async fn cmd(State(state): State<AppState>, Json(req): Json<CmdRequest>) -> Json<Value> {
@@ -67,7 +70,23 @@ async fn cmd(State(state): State<AppState>, Json(req): Json<CmdRequest>) -> Json
     let cwd = std::path::PathBuf::from(req.cwd.unwrap_or_else(|| ".".to_string()));
     let parsed = <crate::cli::Cli as clap::Parser>::try_parse_from(argv);
     let out = match parsed {
-        Ok(cli) => {
+        Ok(mut cli) => {
+            // script - 的 stdin 内容注入命令（execute 侧只认注入后的内容/文件路径）
+            if let crate::cli::Command::Script { source, stdin, .. } = &mut cli.command {
+                if source == "-" {
+                    match req.script_stdin {
+                        Some(s) if !s.trim().is_empty() => *stdin = Some(s),
+                        _ => {
+                            let out = crate::output::Output::failure(
+                                crate::output::ErrorCode::Usage,
+                                "script - 需从 stdin 读取脚本内容（由发起侧 CLI 随请求携带）",
+                                None,
+                            );
+                            return Json(serde_json::to_value(out).expect("输出序列化"));
+                        }
+                    }
+                }
+            }
             // execute 为同步阻塞调用（ADB 进程/IO），移入 blocking 线程池避免卡住 worker
             let exec = Arc::clone(&state.exec);
             match tokio::task::spawn_blocking(move || exec.execute(&cli.command, &cwd)).await {
@@ -291,6 +310,68 @@ mod tests {
             std::fs::read_to_string(tmp.path().join("tokens.json")).expect("tokens.json 存在");
         let tv: Value = serde_json::from_str(&tokens).unwrap();
         assert_eq!(tv["tokens"], json!([]));
+        shutdown.notify_one();
+        handle.await.expect("join").expect("http 服务退出");
+    }
+
+    #[tokio::test]
+    async fn cmd_script_stdin_injected_and_routed_to_bridge() {
+        let tmp = tempfile::tempdir().unwrap();
+        let listener = TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("绑定随机端口");
+        let port = listener.local_addr().unwrap().port();
+        let shutdown = Arc::new(Notify::new());
+        let state = crate::exec::DaemonState::new_in(crate::config::Config::default(), tmp.path());
+        let handle = tokio::spawn(serve(listener, Arc::clone(&shutdown), Arc::clone(&state)));
+
+        // 注册桥接设备（仅 script 能力）并模拟设备侧应答
+        let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
+        let hello = crate::bridge_proto::Hello {
+            pairing_code: None,
+            token: Some("t".into()),
+            device_name: "MuMu".into(),
+            android_version: "12".into(),
+            capabilities: vec![crate::bridge_proto::Capability::Script],
+        };
+        let (_id, _conn) = state.bridge().register(&hello, tx);
+        let reg = Arc::clone(state.bridge());
+        let dev = std::thread::spawn(move || {
+            let frame = rx.blocking_recv().expect("应收到 script 帧");
+            let v: Value = serde_json::from_str(&frame).unwrap();
+            assert_eq!(v["type"], "script");
+            assert_eq!(v["source"], "mobile.tap(1,2)");
+            reg.complete(crate::bridge_proto::ResultMessage {
+                id: v["id"].as_str().unwrap().to_string(),
+                ok: true,
+                result: Some(json!({"done": true})),
+                error: None,
+            });
+        });
+
+        // stdin 内容随请求携带 → 注入命令并经桥接路由
+        let raw = http_post(
+            port,
+            "/cmd",
+            r#"{"args":["script","-","--device","bridge:MuMu"],"script_stdin":"mobile.tap(1,2)"}"#,
+        )
+        .await;
+        let v: Value = serde_json::from_str(body_of(&raw)).expect("解析 /cmd body");
+        assert_eq!(v["ok"], true, "script 经桥接应成功: {v}");
+        assert_eq!(v["result"]["result"], json!({"done": true}));
+        dev.join().unwrap();
+
+        // 缺少 script_stdin → Usage（daemon 无发起侧 stdin）
+        let raw = http_post(
+            port,
+            "/cmd",
+            r#"{"args":["script","-","--device","bridge:MuMu"]}"#,
+        )
+        .await;
+        let v: Value = serde_json::from_str(body_of(&raw)).expect("解析 /cmd body");
+        assert_eq!(v["ok"], false);
+        assert_eq!(v["error"]["code"], "USAGE");
+
         shutdown.notify_one();
         handle.await.expect("join").expect("http 服务退出");
     }

@@ -7,6 +7,8 @@
 mod adb;
 #[path = "../src/backend/mod.rs"]
 mod backend;
+#[path = "../src/bridge_proto.rs"]
+mod bridge_proto;
 #[path = "../src/config.rs"]
 mod config;
 #[allow(dead_code)]
@@ -14,6 +16,9 @@ mod config;
 mod output;
 #[path = "../src/ui.rs"]
 mod ui;
+// backend::bridge 依赖的注册表子树（crate:: 路径与二进制目标一致）
+#[path = "daemon/mod.rs"]
+mod daemon;
 
 use backend::adb::AdbBackend;
 use backend::{Backend, DeviceState};
@@ -53,11 +58,13 @@ fn devices_contains_target_online_and_resolves() {
         .find(|d| d.id == target)
         .unwrap_or_else(|| panic!("设备列表应包含 {target}，实际: {devices:?}"));
     assert_eq!(record.state, DeviceState::Online, "{target} 应在线");
-
-    // 任务 3.4 接线：显式 selector 经 resolve_target 命中同一设备。
-    let resolved = backend
-        .resolve_device(Some(&target), &config::Config::default())
-        .expect("显式指定在线设备应解析成功");
+    let online: Vec<_> = devices
+        .iter()
+        .filter(|d| d.state == DeviceState::Online)
+        .cloned()
+        .collect();
+    let resolved =
+        backend::resolve_target(Some(&target), None, &online).expect("显式指定在线设备应解析成功");
     assert_eq!(resolved.id, target);
 }
 

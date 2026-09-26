@@ -268,13 +268,18 @@ pub fn wait_daemon_gone_in(dir: &std::path::Path, timeout: Duration) -> BResult<
 }
 
 /// CLI 侧把原始命令参数转发给 daemon 执行；返回 daemon 的结构化输出。
+/// `script_stdin`：`script -` 时发起侧从 stdin 读入的脚本内容（daemon 无法访问发起侧 stdin）。
 pub fn post_cmd(
     port: u16,
     args: &[String],
     cwd: &std::path::Path,
+    script_stdin: Option<&str>,
 ) -> BResult<crate::output::Output> {
-    let body = json!({ "args": args, "cwd": cwd }).to_string();
-
+    let mut body = json!({ "args": args, "cwd": cwd });
+    if let Some(s) = script_stdin {
+        body["script_stdin"] = json!(s);
+    }
+    let body = body.to_string();
     let raw = http_request(port, "POST", "/cmd", Some(&body), Duration::from_secs(120))
         .map_err(|e| ErrorBody::io_error(format!("转发命令到 daemon 失败: {e}")))?;
     serde_json::from_str(&raw)

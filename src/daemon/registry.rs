@@ -20,7 +20,6 @@ use tokio::sync::{mpsc, oneshot};
 /// 心跳超时：超过该时长未收到任何消息即判离线（design.md：30s）。
 pub const HEARTBEAT_TIMEOUT: Duration = Duration::from_secs(30);
 
-#[allow(dead_code)] // tx 由组 5 命令路由（dispatch）读取
 struct Connection {
     /// 连接代际：重连后旧连接的断线事件不得误标新连接离线。
     id: u64,
@@ -28,9 +27,9 @@ struct Connection {
     last_seen: Instant,
 }
 
-#[allow(dead_code)] // android_version/capabilities 由组 5 设备枚举与能力校验读取
 struct BridgeDevice {
     name: String,
+    #[allow(dead_code)] // App 上报信息，设备记录暂不展示（预留）
     android_version: String,
     capabilities: Vec<Capability>,
     conn: Option<Connection>,
@@ -125,7 +124,6 @@ impl BridgeRegistry {
     }
 
     /// 设备能力集（组 5 能力校验使用）。
-    #[allow(dead_code)] // 组 5 app-bridge 后端启用
     pub fn capabilities(&self, device_id: &str) -> Option<Vec<Capability>> {
         self.devices
             .lock()
@@ -134,7 +132,6 @@ impl BridgeRegistry {
     }
 
     /// 下发 command 帧并返回结果等待句柄。
-    #[allow(dead_code)] // 组 5 app-bridge 后端启用
     pub fn command(
         self: &Arc<Self>,
         device_id: &str,
@@ -154,7 +151,6 @@ impl BridgeRegistry {
     }
 
     /// 下发 script 帧并返回结果等待句柄。
-    #[allow(dead_code)] // 组 5 app-bridge 后端启用
     pub fn script(
         self: &Arc<Self>,
         device_id: &str,
@@ -178,12 +174,10 @@ impl BridgeRegistry {
         }
     }
 
-    #[allow(dead_code)] // 经 command/script 启用（组 5）
     fn next_request_id(&self) -> String {
         format!("cmd-{}", self.next_id.fetch_add(1, Ordering::Relaxed))
     }
 
-    #[allow(dead_code)] // 经 command/script 启用（组 5）
     fn dispatch(
         self: &Arc<Self>,
         device_id: &str,

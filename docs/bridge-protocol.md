@@ -113,6 +113,33 @@ daemon 收到后按 `id` 唤醒等待方并回 `result_ack`；未知 `id`（如�
 | method | string | 是   | 动作名：`tap`/`swipe`/`input`/`key`/`uiTree`/`screenshot`/`apps`/`launch` |
 | params | object | 是   | 动作参数（无参数动作传 `{}`）                                     |
 
+### command method 参数契约
+
+各 `method` 的 `params` 与成功时 `result.result` 结构（CLI 侧 app-bridge 后端按此契约
+序列化/解析，与 ADB 后端命令语义对齐；`ok=false` 时 `error` 为人读描述）：
+
+| method      | params                                                      | result.result                                |
+| ----------- | ----------------------------------------------------------- | -------------------------------------------- |
+| `tap`       | `{ "x": i32, "y": i32 }`（屏幕坐标）                        | 任意（忽略）                                 |
+| `swipe`     | `{ "x1", "y1", "x2", "y2", "duration_ms" }`（i32/u32）      | 任意（忽略）                                 |
+| `input`     | `{ "text": string }`（JSON 传输，任意 Unicode，无转义体系） | 任意（忽略）                                 |
+| `key`       | `{ "key": string }`（如 `"KEYCODE_HOME"`）                  | 任意（忽略）                                 |
+| `uiTree`    | `{}`                                                        | `{ "xml": string }`（与 uiautomator dump 同构的 UI 树 XML） |
+| `screenshot`| `{}`                                                        | `{ "png_base64": string }`（base64 PNG，决策 15） |
+| `apps`      | `{ "filter": string\|null, "all": bool }`                   | `{ "packages": [string] }`                   |
+| `launch`    | `{ "package": string }`                                     | 任意（忽略）                                 |
+
+说明：
+
+- `uiTree` 的 `full` 语义由 CLI 侧处理（full=原始 XML 直出，否则 CLI 复用同一
+  `@eN` 简化分配逻辑，design.md 决策 5）；App 始终返回完整 XML。
+- `apps` 的 `filter`（包名子串过滤）与 `all`（含系统应用）由设备侧执行，
+  与 ADB 后端 `pm list packages [-3]` 语义一致。
+- CLI `agent-mobile-cli script <file.js|->` 命令对应 `script` 帧（daemon 侧要求
+  hello 上报 `script` 能力，缺失即 NOT_SUPPORTED 不下发）。
+- 所有 command/script 下发前 daemon 按 hello `capabilities` 校验（决策 6）：
+  能力缺失返回 NOT_SUPPORTED 结构化错误（含能力名与设备名），不下发帧。
+
 ### script
 
 ```json

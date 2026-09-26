@@ -1,7 +1,6 @@
 //! ADB 直连后端：实现 Backend trait，预留 app-bridge 路由（design.md 决策 10）。
-use super::{resolve_target, BResult, Backend, BackendKind, DeviceRecord, ShellResult, TapTarget};
+use super::{BResult, Backend, BackendKind, DeviceRecord, ShellResult, TapTarget};
 use crate::adb::Adb;
-use crate::config::Config;
 use crate::output::ErrorBody;
 use std::path::{Path, PathBuf};
 
@@ -13,16 +12,6 @@ pub struct AdbBackend {
 impl AdbBackend {
     pub fn new(adb: Adb) -> Self {
         Self { adb }
-    }
-
-    /// 目标设备解析接线：--device 显式指定 → 配置默认 → 仅一台在线 → 歧义错误。
-    pub fn resolve_device(&self, selector: Option<&str>, config: &Config) -> BResult<DeviceRecord> {
-        let online: Vec<DeviceRecord> = self
-            .devices()?
-            .into_iter()
-            .filter(|d| d.state == super::DeviceState::Online)
-            .collect();
-        resolve_target(selector, config.default_device.as_deref(), &online)
     }
 
     /// 执行设备 shell 命令并校验远端退出码为 0（组 4 内部辅助）。
@@ -94,14 +83,14 @@ fn parse_packages(text: &str) -> Vec<String> {
         .collect()
 }
 
-/// 校验 PNG 魔数（纯函数）：screencap 输出损坏/非 PNG 时转 AdbError。
-fn validate_png(bytes: &[u8]) -> BResult<()> {
+/// 校验 PNG 魔数（纯函数）：截图输出损坏/非 PNG 时转 AdbError（adb screencap 与桥接截图共用）。
+pub(super) fn validate_png(bytes: &[u8]) -> BResult<()> {
     const PNG_MAGIC: &[u8; 8] = b"\x89PNG\r\n\x1a\n";
     if bytes.len() >= PNG_MAGIC.len() && &bytes[..8] == PNG_MAGIC {
         Ok(())
     } else {
         Err(ErrorBody::adb_error(
-            "screencap 输出不是有效 PNG（魔数不匹配或为空）",
+            "截图数据不是有效 PNG（魔数不匹配或为空）",
             Some(serde_json::json!({ "bytes": bytes.len() })),
         ))
     }
@@ -299,6 +288,13 @@ impl Backend for AdbBackend {
         )
     }
 
+    /// 脚本执行：ADB 模式无脚本语义（脚本为桥接 QuickJS 沙盒能力，design.md 决策 2/12）。
+    fn script(&self, device: &str, _source: &str) -> BResult<serde_json::Value> {
+        Err(ErrorBody::not_supported(format!(
+            "ADB 后端不支持 script 能力（设备 {device}）：脚本仅桥接设备可用"
+        )))
+    }
+
     fn stop(&self, device: &str, package: &str) -> BResult<()> {
         validate_package(package)?;
         self.shell_checked(device, &format!("am force-stop {package}"))
@@ -492,6 +488,15 @@ mod tests {
     fn trim_logcat_zero_lines_returns_empty() {
         let sample = "--------- beginning of main\nline a\n";
         assert_eq!(trim_logcat(sample, 0), "");
+    }
+
+    #[test]
+    fn script_on_adb_backend_not_supported() {
+        // ADB 模式无脚本语义：结构化 NOT_SUPPORTED，消息含能力名与设备名
+        let b = backend();
+        let e = b.script("emu64a", "mobile.tap(1,2)").unwrap_err();
+        assert_eq!(e.code, crate::output::ErrorCode::NotSupported);
+        assert!(e.message.contains("script") && e.message.contains("emu64a"));
     }
 
     #[test]

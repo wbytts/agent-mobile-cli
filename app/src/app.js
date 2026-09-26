@@ -61,21 +61,115 @@
     btnScan.textContent = "扫码配对（待接线）";
   });
 
-  // ---------- 能力自检页（mock） ----------
+  // ---------- 能力自检页（真实插件调用） ----------
   var capResult = document.getElementById("cap-result");
+  var a11yState = document.getElementById("a11y-state");
+  var tauri = window.__TAURI__;
+  var invoke = tauri && tauri.core ? tauri.core.invoke : null;
+
+  function refreshA11yStatus() {
+    if (!invoke) {
+      a11yState.textContent = "不可用（非 Tauri 环境）";
+      return;
+    }
+    invoke("bridge_a11y_status")
+      .then(function (res) {
+        var enabled = !!(res && res.enabled);
+        a11yState.textContent = enabled ? "已开启" : "未开启";
+        a11yState.className = "badge " + (enabled ? "badge-connected" : "badge-warn");
+      })
+      .catch(function (err) {
+        a11yState.textContent = "检测失败";
+        appendLog("err", "无障碍状态检测失败：" + err);
+      });
+  }
+
+  // 逐项能力自测：返回 Promise<展示文本>
+  var capActions = {
+    tap: function () {
+      // 点击自检页结果区空白处，避免手势误触列表按钮造成级联自测
+      return invoke("bridge_tap", { x: 720, y: 1900 }).then(function () {
+        return "已在 (720, 1900) 执行点击";
+      });
+    },
+    swipe: function () {
+      return invoke("bridge_swipe", { x1: 540, y1: 1600, x2: 540, y2: 600, durationMs: 300 })
+        .then(function () {
+          return "已执行 (540,1600)→(540,600) 300ms 滑动";
+        });
+    },
+    input: function () {
+      return invoke("bridge_input", { text: "agent-mobile 自检" }).then(function () {
+        return "已向当前焦点输入框注入文本";
+      });
+    },
+    key: function () {
+      return invoke("bridge_key", { key: "notifications" }).then(function () {
+        return "已执行全局动作 notifications（下拉通知栏）";
+      });
+    },
+    uiTree: function () {
+      return invoke("bridge_ui_tree").then(function (res) {
+        var xml = (res && res.xml) || "";
+        return "UI 树获取成功，XML " + xml.length + " 字符";
+      });
+    },
+    screenshot: function () {
+      return invoke("bridge_screenshot").then(function (res) {
+        var b64 = (res && res.png_base64) || "";
+        var kb = Math.round((b64.length * 3) / 4 / 1024);
+        return "截图成功，PNG 约 " + kb + " KB";
+      });
+    }
+  };
+
   document.querySelectorAll(".btn-cap").forEach(function (btn) {
     btn.addEventListener("click", function () {
       var cap = btn.dataset.cap;
-      // TODO(接线): 调用 Rust 命令 self_test(cap)
-      capResult.textContent = "「" + cap + "」自测待接线：等待无障碍服务与插件接入";
-      appendLog("info", "能力自测 " + cap + "：待接线");
+      if (!invoke) {
+        capResult.textContent = "「" + cap + "」不可用：非 Tauri 环境";
+        return;
+      }
+      capResult.textContent = "「" + cap + "」自测中…";
+      capActions[cap]()
+        .then(function (text) {
+          capResult.textContent = "「" + cap + "」成功：" + text;
+          appendLog("ok", "能力自测 " + cap + " 成功：" + text);
+        })
+        .catch(function (err) {
+          capResult.textContent = "「" + cap + "」失败：" + err;
+          appendLog("err", "能力自测 " + cap + " 失败：" + err);
+        });
     });
   });
 
   document.getElementById("btn-a11y-settings").addEventListener("click", function () {
-    // TODO(接线): 跳转系统无障碍设置
-    capResult.textContent = "无障碍设置跳转待接线";
-    appendLog("info", "无障碍设置跳转：待接线");
+    if (!invoke) {
+      capResult.textContent = "不可用：非 Tauri 环境";
+      return;
+    }
+    invoke("bridge_open_a11y_settings")
+      .then(function () {
+        appendLog("info", "已跳转系统无障碍设置");
+      })
+      .catch(function (err) {
+        capResult.textContent = "跳转失败：" + err;
+        appendLog("err", "无障碍设置跳转失败：" + err);
+      });
+  });
+
+  // 进入自检页 / 从设置页返回时刷新权限状态
+  tabs.forEach(function (t) {
+    t.addEventListener("click", function () {
+      if (t.dataset.page === "page-caps") {
+        refreshA11yStatus();
+      }
+    });
+  });
+  document.addEventListener("visibilitychange", function () {
+    if (!document.hidden && document.getElementById("page-caps").classList.contains("active")) {
+      refreshA11yStatus();
+    }
   });
 
   // ---------- 日志页 ----------
@@ -91,11 +185,11 @@
     logList.insertBefore(li, logList.firstChild);
   }
 
-  // mock 日志条目
-  appendLog("info", "App 启动（mock 数据，未接 Rust core）");
-  appendLog("info", "检测到无障碍服务：未开启（mock）");
+  // mock 日志条目（连接/日志页接线在任务组 4）
+  appendLog("info", "App 启动（连接状态为 mock，待任务组 4 接线）");
   appendLog("err", "连接 daemon 失败：ECONNREFUSED 192.168.1.10:18777（mock 示例）");
   appendLog("ok", "心跳 ok，rtt=12ms（mock 示例）");
 
   renderConnState();
+  refreshA11yStatus();
 })();

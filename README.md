@@ -49,6 +49,8 @@ agent-mobile-cli apps [--filter xxx] [--all]
 agent-mobile-cli launch|stop <package>
 agent-mobile-cli logcat [--lines 100] [--tag T] [--level E]
 agent-mobile-cli shell [--device <serial>] <cmd...>   # 选项需写在 cmd 之前
+agent-mobile-cli script <file.js|-> --device bridge:<name>   # 桥接设备 JS 沙盒（mobile.*）
+agent-mobile-cli pair [--reset]                            # 桥接配对码/二维码/重置
 agent-mobile-cli daemon-status|daemon-restart|daemon-stop
 ```
 

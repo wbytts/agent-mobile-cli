@@ -101,6 +101,15 @@ pub enum Command {
         #[arg(long)]
         device: Option<String>,
     },
+    /// 在桥接设备上执行 JS 脚本（QuickJS 沙盒，注入 mobile.* API；source 为文件路径或 "-" 读 stdin）
+    Script {
+        source: String,
+        #[arg(long)]
+        device: Option<String>,
+        /// 发起侧 CLI 从 stdin 读入的脚本内容（daemon 转发层注入，非命令行参数）
+        #[arg(skip)]
+        stdin: Option<String>,
+    },
     /// 查看 daemon 状态
     DaemonStatus,
     /// 显示桥接配对信息（配对码/候选局域网地址/配对二维码）
@@ -252,5 +261,38 @@ mod tests {
         assert_eq!(cli.command, Command::Pair { reset: false });
         let cli = Cli::try_parse_from(["agent-mobile-cli", "pair", "--reset"]).unwrap();
         assert_eq!(cli.command, Command::Pair { reset: true });
+    }
+    #[test]
+    fn parses_script() {
+        let cli = Cli::try_parse_from([
+            "agent-mobile-cli",
+            "script",
+            "tap.js",
+            "--device",
+            "bridge:MuMu",
+        ])
+        .unwrap();
+        assert_eq!(
+            cli.command,
+            Command::Script {
+                source: "tap.js".into(),
+                device: Some("bridge:MuMu".into()),
+                stdin: None,
+            }
+        );
+        // "-" 从 stdin 读取
+        let cli = Cli::try_parse_from(["agent-mobile-cli", "script", "-"]).unwrap();
+        match cli.command {
+            Command::Script {
+                source,
+                device,
+                stdin,
+            } => {
+                assert_eq!(source, "-");
+                assert_eq!(device, None);
+                assert_eq!(stdin, None);
+            }
+            other => panic!("unexpected: {other:?}"),
+        }
     }
 }

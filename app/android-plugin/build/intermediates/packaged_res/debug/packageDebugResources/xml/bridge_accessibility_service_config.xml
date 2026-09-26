@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 无障碍服务配置：手势分发（点击/滑动）、窗口内容读取（UI 树）、截图（API 30+） -->
+<accessibility-service xmlns:android="http://schemas.android.com/apk/res/android"
+    android:accessibilityEventTypes="typeAllMask"
+    android:accessibilityFeedbackType="feedbackGeneric"
+    android:notificationTimeout="100"
+    android:canPerformGestures="true"
+    android:canRetrieveWindowContent="true"
+    android:canTakeScreenshot="true"
+    android:accessibilityFlags="flagRetrieveInteractiveWindows"
+    android:description="@string/bridge_service_description" />
