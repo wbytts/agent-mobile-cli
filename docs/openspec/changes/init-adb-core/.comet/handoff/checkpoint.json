@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 1,
+  "taskIds": [],
+  "revision": "0460093c3790b69595360048b67945eeb807d03dec30fc6cfd45d5c0010695a8",
+  "stage": "build-review-passed",
+  "sessionId": "init-adb-core-build",
+  "evidence": [
+    "24/24 任务全部勾选；提交序列 ff90a66..26b9501",
+    "cargo test 85+54+54 全绿；MuMu 集成 12 项通过；clippy --all-targets -D warnings 干净；fmt 干净",
+    "standard review：reviewer 初审 3 IMPORTANT + 6 MINOR 全部修复（ed0509e）；1 轮复查结论 correct，无残留 CRITICAL/IMPORTANT；复查 6 条新 P3 中 N4/N5 已修（26b9501）",
+    "6.1 端到端验收 10 项 PASS（connect 幂等/枚举/歧义/launch 前台/apps/stop/非 ASCII NOT_SUPPORTED/input/key/screenshot PNG/logcat ≤N 无块头/daemon 生命周期/离线 DEVICE_NOT_FOUND），MuMu 模拟器 + NTH-AN00 真机双端验证",
+    "npm pack 全局安装实测：--version 与 devices 通过（vendor 预置二进制装配成功）"
+  ],
+  "unresolved": [
+    "复查 P3 打磨项（已确认接受，后续 change 处理）：N1 remove_stale_lock 未同步启动宽限（用户可见行为已正确）；N2 漂移判定用 port_listening（三重巧合下 stop 误击外部服务）；N3 卡死 daemon 进程无 CLI 清理出路；N6 dump 失败设备端残留 + dump 锁跨设备串行"
+  ],
+  "reviewRounds": 1
+}
