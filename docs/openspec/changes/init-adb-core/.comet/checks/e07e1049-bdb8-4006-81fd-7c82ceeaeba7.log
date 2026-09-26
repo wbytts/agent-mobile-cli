@@ -1,0 +1,226 @@
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.13s
+     Running unittests src/main.rs (target/debug/deps/agent_mobile_cli-d782b68459b6f427)
+
+running 87 tests
+test adb::tests::locate_returns_none_when_all_fail ... ok
+test adb::tests::locate_falls_back_to_platform_path ... ok
+test adb::tests::locate_prefers_config_path ... ok
+test adb::tests::locate_falls_back_to_android_home_when_config_missing ... ok
+test adb::tests::locate_prefers_android_home_over_sdk_root ... ok
+test adb::tests::locate_falls_back_to_path ... ok
+test adb::tests::parses_empty_list ... ok
+test adb::tests::skips_daemon_messages_and_classifies_connection ... ok
+test adb::tests::strip_exit_marker_handles_missing_marker ... ok
+test adb::tests::parses_devices_states_and_model ... ok
+test adb::tests::classify_device_not_found_from_stderr ... ok
+test adb::tests::classify_device_offline_from_stderr ... ok
+test backend::adb::tests::escape_input_text_converts_space_to_percent_s ... ok
+test adb::tests::strip_exit_marker_glued_to_output_without_newline ... ok
+test adb::tests::strip_exit_marker_parses_trailing_code ... ok
+test adb::tests::strip_exit_marker_parses_nonzero_code ... ok
+test backend::adb::tests::escape_input_text_escapes_literal_percent ... ok
+test backend::adb::tests::escape_input_text_escapes_shell_metachars ... ok
+test adb::tests::classify_generic_failure_as_adb_error ... ok
+test backend::adb::tests::escape_input_text_rejects_control_chars ... ok
+test backend::adb::tests::escape_input_text_rejects_non_ascii ... ok
+test adb::tests::locate_error_contains_install_hint ... ok
+test backend::adb::tests::kind_is_adb ... ok
+test backend::adb::tests::parse_packages_extracts_names ... ok
+test backend::adb::tests::parse_packages_skips_malformed_and_empty ... ok
+test backend::adb::tests::tap_ref_returns_not_supported_without_spawn ... ok
+test backend::adb::tests::trim_logcat_zero_lines_returns_empty ... ok
+test backend::adb::tests::trim_logcat_drops_buffer_headers_and_caps_lines ... ok
+test backend::adb::tests::trim_logcat_keeps_short_output_unchanged ... ok
+test backend::adb::tests::validate_png_accepts_magic_header ... ok
+test backend::adb::tests::validate_png_rejects_non_png_and_empty ... ok
+test backend::tests::default_used_when_no_selector ... ok
+test backend::tests::resolve_single_online ... ok
+test backend::tests::resolve_none_online ... ok
+test backend::tests::resolve_selector_hit_and_miss ... ok
+test backend::tests::resolve_ambiguous_lists_candidates ... ok
+test backend::adb::tests::missing_adb_binary_surfaces_io_error ... ok
+test config::tests::default_values ... ok
+test cli::tests::parses_connect ... ok
+test cli::tests::parses_devices ... ok
+test cli::tests::parses_swipe ... ok
+test cli::tests::parses_logcat_options ... ok
+test cli::tests::parses_snapshot_with_device ... ok
+test cli::tests::parses_shell_trailing ... ok
+test cli::tests::parses_tap_coordinate_and_ref ... ok
+test cli::tests::shell_requires_cmd ... ok
+test cli::tests::parses_daemon_lifecycle ... ok
+test config::tests::creates_default_when_missing ... ok
+test backend::adb::tests::ops_with_missing_adb_binary_surface_io_error ... ok
+test config::tests::loads_existing ... ok
+test daemon::lock::tests::acquire_creates_lock_and_drop_releases ... ok
+test daemon::lock::tests::concurrent_scopes_single_acquired_then_reacquire ... ok
+test daemon::http::tests::shutdown_endpoint_stops_server ... ok
+test daemon::http::tests::health_returns_ok_with_version_and_uptime ... ok
+test daemon::http::tests::cmd_invalid_command_returns_usage_error ... ok
+test daemon::lock::tests::threaded_race_single_acquired ... ok
+test daemon::http::tests::cmd_daemon_lifecycle_rejected ... ok
+test config::tests::rejects_invalid_json ... ok
+test exec::tests::daemon_commands_rejected ... ok
+test exec::tests::resolve_out_relative_uses_cwd ... ok
+test daemon::ws::tests::handshake_hello_ack_and_keepalive ... ok
+test exec::tests::shell_rejects_trailing_device_flag ... ok
+test exec::tests::tap_coord_parse ... ok
+test exec::tests::tap_ref_requires_snapshot ... ok
+test output::tests::error_code_serialization ... ok
+test output::tests::failure_json_shape_and_code ... ok
+test output::tests::success_exit_code_zero ... ok
+test output::tests::success_json_shape ... ok
+test ui::tests::assigns_refs_in_document_order ... ok
+test daemon::lock::tests::remove_stale_lock_only_when_not_running ... ok
+test daemon::lock::tests::stale_lock_recycled ... ok
+test ui::tests::drops_zero_area_and_empty_containers ... ok
+test ui::tests::computes_center_from_bounds ... ok
+test ui::tests::rejects_invalid_xml ... ok
+test ui::tests::lifts_button_out_of_empty_container_with_correct_indent ... ok
+test ui::tests::shows_content_desc_and_ref ... ok
+test ui::tests::scrollable_container_gets_ref ... ok
+test ui::tests::refs_appear_in_tree_with_marks ... ok
+test daemon::tests::ensure_daemon_port_mismatch_returns_guidance ... ok
+test daemon::tests::stop_uses_lock_port_when_config_port_unreachable ... ok
+test daemon::tests::status_lock_missing_but_healthy_reports_running ... ok
+test daemon::tests::status_prefers_lock_port_when_config_port_changed ... ok
+test exec::tests::shell_allows_quoted_device_literal ... ok
+test daemon::lock::tests::corrupted_lock_recycled ... ok
+test daemon::lock::tests::startup_grace_waits_for_late_listener ... ok
+test daemon::lock::tests::grace_exhausted_with_alive_holder_reports_running ... ok
+test daemon::lock::tests::dual_process_race ... ok
+
+test result: ok. 87 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 3.02s
+
+     Running tests/adb_integration.rs (target/debug/deps/adb_integration-07c3a999bbc43ef6)
+
+running 56 tests
+test adb::tests::locate_falls_back_to_android_home_when_config_missing ... ok
+test adb::tests::locate_prefers_config_path ... ok
+test adb::tests::locate_prefers_android_home_over_sdk_root ... ok
+test adb::tests::locate_returns_none_when_all_fail ... ok
+test adb::tests::locate_falls_back_to_platform_path ... ok
+test adb::tests::locate_falls_back_to_path ... ok
+test adb::tests::classify_device_offline_from_stderr ... ok
+test adb::tests::parses_empty_list ... ok
+test adb::tests::classify_device_not_found_from_stderr ... ok
+test adb::tests::strip_exit_marker_handles_missing_marker ... ok
+test adb::tests::classify_generic_failure_as_adb_error ... ok
+test adb::tests::strip_exit_marker_parses_nonzero_code ... ok
+test adb::tests::strip_exit_marker_glued_to_output_without_newline ... ok
+test adb::tests::parses_devices_states_and_model ... ok
+test adb::tests::skips_daemon_messages_and_classifies_connection ... ok
+test adb::tests::strip_exit_marker_parses_trailing_code ... ok
+test backend::adb::tests::escape_input_text_converts_space_to_percent_s ... ok
+test backend::adb::tests::escape_input_text_escapes_shell_metachars ... ok
+test backend::adb::tests::escape_input_text_escapes_literal_percent ... ok
+test backend::adb::tests::escape_input_text_rejects_control_chars ... ok
+test backend::adb::tests::escape_input_text_rejects_non_ascii ... ok
+test adb::tests::locate_error_contains_install_hint ... ok
+test backend::adb::tests::kind_is_adb ... ok
+test backend::adb::tests::parse_packages_extracts_names ... ok
+test backend::adb::tests::parse_packages_skips_malformed_and_empty ... ok
+test backend::adb::tests::trim_logcat_zero_lines_returns_empty ... ok
+test backend::adb::tests::validate_png_accepts_magic_header ... ok
+test backend::adb::tests::tap_ref_returns_not_supported_without_spawn ... ok
+test backend::tests::default_used_when_no_selector ... ok
+test backend::adb::tests::validate_png_rejects_non_png_and_empty ... ok
+test backend::tests::resolve_ambiguous_lists_candidates ... ok
+test backend::tests::resolve_none_online ... ok
+test backend::adb::tests::trim_logcat_keeps_short_output_unchanged ... ok
+test backend::adb::tests::trim_logcat_drops_buffer_headers_and_caps_lines ... ok
+test connect_after_disconnect_succeeds ... ignored, 需要真实 adb 与在线设备
+test devices_contains_target_online_and_resolves ... ignored, 需要真实 adb 与在线设备
+test output::tests::error_code_serialization ... ok
+test backend::tests::resolve_selector_hit_and_miss ... ok
+test backend::tests::resolve_single_online ... ok
+test output::tests::success_exit_code_zero ... ok
+test output::tests::failure_json_shape_and_code ... ok
+test output::tests::success_json_shape ... ok
+test config::tests::default_values ... ok
+test backend::adb::tests::missing_adb_binary_surfaces_io_error ... ok
+test ui::tests::computes_center_from_bounds ... ok
+test ui::tests::rejects_invalid_xml ... ok
+test ui::tests::assigns_refs_in_document_order ... ok
+test ui::tests::lifts_button_out_of_empty_container_with_correct_indent ... ok
+test ui::tests::drops_zero_area_and_empty_containers ... ok
+test ui::tests::refs_appear_in_tree_with_marks ... ok
+test ui::tests::shows_content_desc_and_ref ... ok
+test ui::tests::scrollable_container_gets_ref ... ok
+test config::tests::creates_default_when_missing ... ok
+test backend::adb::tests::ops_with_missing_adb_binary_surface_io_error ... ok
+test config::tests::rejects_invalid_json ... ok
+test config::tests::loads_existing ... ok
+
+test result: ok. 54 passed; 0 failed; 2 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/control_integration.rs (target/debug/deps/control_integration-10eeb4fedc22e19e)
+
+running 64 tests
+test adb::tests::locate_falls_back_to_platform_path ... ok
+test adb::tests::locate_prefers_config_path ... ok
+test adb::tests::locate_falls_back_to_path ... ok
+test adb::tests::locate_returns_none_when_all_fail ... ok
+test adb::tests::locate_prefers_android_home_over_sdk_root ... ok
+test adb::tests::classify_device_offline_from_stderr ... ok
+test adb::tests::classify_device_not_found_from_stderr ... ok
+test adb::tests::classify_generic_failure_as_adb_error ... ok
+test adb::tests::strip_exit_marker_handles_missing_marker ... ok
+test adb::tests::parses_empty_list ... ok
+test adb::tests::locate_falls_back_to_android_home_when_config_missing ... ok
+test adb::tests::locate_error_contains_install_hint ... ok
+test adb::tests::parses_devices_states_and_model ... ok
+test adb::tests::skips_daemon_messages_and_classifies_connection ... ok
+test adb::tests::strip_exit_marker_glued_to_output_without_newline ... ok
+test adb::tests::strip_exit_marker_parses_nonzero_code ... ok
+test apps_contains_settings_and_filter_works ... ignored, 需要真实 adb 与在线设备
+test adb::tests::strip_exit_marker_parses_trailing_code ... ok
+test backend::adb::tests::escape_input_text_converts_space_to_percent_s ... ok
+test backend::adb::tests::escape_input_text_escapes_literal_percent ... ok
+test backend::adb::tests::escape_input_text_escapes_shell_metachars ... ok
+test backend::adb::tests::escape_input_text_rejects_control_chars ... ok
+test backend::adb::tests::escape_input_text_rejects_non_ascii ... ok
+test backend::adb::tests::kind_is_adb ... ok
+test backend::adb::tests::parse_packages_extracts_names ... ok
+test backend::adb::tests::parse_packages_skips_malformed_and_empty ... ok
+test backend::adb::tests::tap_ref_returns_not_supported_without_spawn ... ok
+test backend::adb::tests::trim_logcat_drops_buffer_headers_and_caps_lines ... ok
+test backend::adb::tests::trim_logcat_keeps_short_output_unchanged ... ok
+test backend::adb::tests::trim_logcat_zero_lines_returns_empty ... ok
+test backend::adb::tests::validate_png_accepts_magic_header ... ok
+test backend::adb::tests::validate_png_rejects_non_png_and_empty ... ok
+test backend::tests::default_used_when_no_selector ... ok
+test backend::tests::resolve_ambiguous_lists_candidates ... ok
+test concurrent_snapshots_both_succeed ... ignored, 需要真实 adb 与在线设备
+test backend::tests::resolve_none_online ... ok
+test backend::tests::resolve_single_online ... ok
+test backend::tests::resolve_selector_hit_and_miss ... ok
+test config::tests::default_values ... ok
+test input_text_ascii_succeeds_and_non_ascii_rejected ... ignored, 需要真实 adb 与在线设备
+test launch_and_stop_settings ... ignored, 需要真实 adb 与在线设备
+test logcat_respects_line_limit ... ignored, 需要真实 adb 与在线设备
+test offline_device_yields_structured_error ... ignored, 需要真实 adb 与在线设备
+test output::tests::error_code_serialization ... ok
+test screenshot_writes_valid_png ... ignored, 需要真实 adb 与在线设备
+test shell_getprop_returns_model_with_exit_zero ... ignored, 需要真实 adb 与在线设备
+test snapshot_returns_tree_with_refs ... ignored, 需要真实 adb 与在线设备
+test tap_coord_changes_ui ... ignored, 需要真实 adb 与在线设备
+test output::tests::failure_json_shape_and_code ... ok
+test backend::adb::tests::missing_adb_binary_surfaces_io_error ... ok
+test output::tests::success_exit_code_zero ... ok
+test output::tests::success_json_shape ... ok
+test ui::tests::lifts_button_out_of_empty_container_with_correct_indent ... ok
+test ui::tests::rejects_invalid_xml ... ok
+test ui::tests::assigns_refs_in_document_order ... ok
+test ui::tests::refs_appear_in_tree_with_marks ... ok
+test ui::tests::drops_zero_area_and_empty_containers ... ok
+test ui::tests::shows_content_desc_and_ref ... ok
+test ui::tests::scrollable_container_gets_ref ... ok
+test ui::tests::computes_center_from_bounds ... ok
+test config::tests::creates_default_when_missing ... ok
+test backend::adb::tests::ops_with_missing_adb_binary_surface_io_error ... ok
+test config::tests::loads_existing ... ok
+test config::tests::rejects_invalid_json ... ok
+
+test result: ok. 54 passed; 0 failed; 10 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
