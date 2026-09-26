@@ -1,6 +1,7 @@
 //! 后端抽象层契约：统一设备模型与后端接口（design.md 决策 10）。
 //! 本文件只定义类型与接口，实现由 adb / app-bridge 后端模块提供。
 
+pub mod adb;
 use crate::output::ErrorBody;
 use serde::Serialize;
 use std::path::Path;
@@ -8,6 +9,8 @@ use std::path::PathBuf;
 
 pub type BResult<T> = Result<T, ErrorBody>;
 
+// TODO(组4接线后移除): 过渡 allow，组 4 CLI 接线后统一清理
+#[allow(dead_code)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum BackendKind {
@@ -23,6 +26,8 @@ pub enum DeviceState {
     Unauthorized,
 }
 
+// TODO(组4接线后移除): 过渡 allow，组 4 CLI 接线后统一清理
+#[allow(dead_code)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "lowercase")]
 pub enum ConnectionKind {
@@ -40,6 +45,8 @@ pub struct DeviceRecord {
     pub connection: ConnectionKind,
 }
 
+// TODO(组4接线后移除): 过渡 allow，组 4 CLI 接线后统一清理
+#[allow(dead_code)]
 #[derive(Debug, Clone, PartialEq)]
 pub enum TapTarget {
     Coord(i32, i32),
@@ -54,6 +61,8 @@ pub struct ShellResult {
 }
 
 /// 统一后端接口：控制命令经该接口路由到目标设备所属后端。
+// TODO(组4接线后移除): 过渡 allow，组 4 CLI 接线后统一清理
+#[allow(dead_code)]
 pub trait Backend: Send + Sync {
     fn kind(&self) -> BackendKind;
     fn devices(&self) -> BResult<Vec<DeviceRecord>>;

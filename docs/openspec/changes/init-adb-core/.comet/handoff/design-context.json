@@ -1,0 +1,18 @@
+{
+  "change": "init-adb-core",
+  "phase": "design",
+  "mode": "compact",
+  "canonical_spec": "openspec",
+  "task_hash_policy": "task-content-v1",
+  "generated_by": "comet-handoff.sh",
+  "context_hash": "f62970ab124ea48d04be387ce0a8731bea3046cf676b34200291c707e1e772de",
+  "files": [
+    { "path": "docs/openspec/changes/init-adb-core/proposal.md", "sha256": "419407a6d9041974b6828d60ca48259049e7a4e52ada25b9a6c276998951b74f" },
+    { "path": "docs/openspec/changes/init-adb-core/design.md", "sha256": "2e1c888177d9c9f09f20e13fc4c8fd37e04ddbf6fc5397df54825c1c7a4b3b91" },
+    { "path": "docs/openspec/changes/init-adb-core/tasks.md", "sha256": "c24f588ad8056e3202f488de30f4edd8497162cb69d3cd265805336787f978d7" },
+    { "path": "docs/openspec/changes/init-adb-core/.openspec.yaml", "sha256": "062e545e250441aa0692c22d7a65e07334f1c0f2e706c0e297f36065b6a0699c" },
+    { "path": "docs/openspec/changes/init-adb-core/specs/cli-daemon/spec.md", "sha256": "6539da8f7c0d3374256f669fdb41b28ebf7e5df7afd8bd491cd38744b16045b6" },
+    { "path": "docs/openspec/changes/init-adb-core/specs/device-backends/spec.md", "sha256": "a7c983728a6b153d605b0673a118a6461bb2d25835dd592259197e87ca69ae94" },
+    { "path": "docs/openspec/changes/init-adb-core/specs/device-control/spec.md", "sha256": "86d06e96e790ee8ae5b1161f82e329470310db25c8c8f35c2c4ac98f4d42ffcf" }
+  ]
+}

@@ -106,9 +106,11 @@ mod tests {
         let _g = ENV_LOCK.lock();
         let tmp = tempfile::tempdir().unwrap();
         std::env::set_var("AGENT_MOBILE_HOME", tmp.path());
-        let mut cfg = Config::default();
-        cfg.http_port = 19000;
-        cfg.default_device = Some("127.0.0.1:5555".into());
+        let cfg = Config {
+            http_port: 19000,
+            default_device: Some("127.0.0.1:5555".into()),
+            ..Config::default()
+        };
         cfg.save().unwrap();
         let loaded = Config::load_or_create().unwrap();
         assert_eq!(loaded.http_port, 19000);

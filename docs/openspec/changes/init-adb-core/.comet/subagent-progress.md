@@ -1,0 +1,20 @@
+# Classic Coordination Checkpoint
+
+Generated from coordination.json; tasks.md remains the completion authority.
+
+Stage: implementing
+Tasks: 627002aa-d98c-493d-8278-b05562c0666d, 2cf57575-7d35-4f1d-9566-35e698f40d7a, 5faf1b78-9cba-40e8-9dfe-392d2de93f0e, 772e0432-8c9a-4e00-9dad-024b87ff7f9c, ba46e25e-fea6-4c1c-9dbd-8bce5a2f2a8a, 5d2b80ab-3e3b-496a-a868-725b8373dcc6, ede50616-6063-4c3d-9503-d5c2870b415b, 7cf82c41-e766-45ff-bb94-9841f81d5d1d, 1b9f0a2d-fe58-4cce-bf3f-30e40613daa6, 8e1074c3-e5d7-412c-a3d6-4cf3db1f5407
+Revision: 0460093c3790b69595360048b67945eeb807d03dec30fc6cfd45d5c0010695a8
+Session: init-adb-core-build
+Review rounds: 0
+
+## Evidence
+- 组1已提交 ff90a66（17 测试全绿）
+- 契约骨架已提交 15f7695（backend 5 测试过，adb 2 + ui 5 测试 RED）
+- 派发 DaemonImpl（组2: daemon lock/http/ws/生命周期，独占 src/daemon 与 src/main.rs）
+- 派发 AdbImpl（组3 库层: adb 探测/枚举/connect/AdbBackend，独占 src/adb 与 src/backend/adb.rs）
+- 派发 UiImpl（组4.1 库层: ui 简化树，独占 src/ui.rs）
+
+## Unresolved
+- 组4.2-4.8 控制命令实现待 AdbImpl 完成后派发或主会话实施
+- CLI 命令经 daemon 执行的接线待 DaemonImpl 完成后主会话统一实施

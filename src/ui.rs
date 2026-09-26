@@ -1,5 +1,9 @@
 //! 屏幕 UI 快照：uiautomator XML 简化树与 @eN 元素引用（design.md 决策 4）。
+// TODO(接线): CLI snapshot 命令接线后移除本行（当前仅测试引用，避免 dead_code 警告）。
+#![allow(dead_code)]
 
+use quick_xml::events::Event;
+use quick_xml::Reader;
 use serde::Serialize;
 
 #[derive(Debug, Clone, Serialize)]
@@ -23,12 +27,164 @@ pub struct Snapshot {
     pub refs: Vec<ElemRef>,
 }
 
+/// 解析阶段的原始节点（含被简化剔除的容器）。
+#[derive(Debug, Default)]
+struct RawNode {
+    class: String,
+    text: String,
+    desc: String,
+    /// clickable/long-clickable/focusable/scrollable 任一为真
+    interactive: bool,
+    bounds: (i32, i32, i32, i32),
+    children: Vec<RawNode>,
+}
+
 /// 将 uiautomator dump 的 XML 解析为简化快照。
 /// 简化规则（design.md 决策 4）：剔除零面积节点与无文本无描述且不可交互的容器
 /// （递归上提子节点）；可交互节点按先序分配 @eN。
 pub fn simplify(xml: &str) -> Result<Snapshot, String> {
-    let _ = xml;
-    unimplemented!("任务 4.1 实现")
+    let roots = parse_nodes(xml)?;
+    let mut lines = Vec::new();
+    let mut refs = Vec::new();
+    for node in &roots {
+        render_node(node, 0, &mut lines, &mut refs);
+    }
+    Ok(Snapshot {
+        tree: lines.join("\n"),
+        refs,
+    })
+}
+
+/// 事件流解析 <node> 元素为树；标签不闭合、属性或 bounds 非法均报错。
+fn parse_nodes(xml: &str) -> Result<Vec<RawNode>, String> {
+    let mut reader = Reader::from_str(xml);
+    let mut roots: Vec<RawNode> = Vec::new();
+    let mut stack: Vec<RawNode> = Vec::new();
+    loop {
+        match reader
+            .read_event()
+            .map_err(|e| format!("XML 解析失败: {e}"))?
+        {
+            Event::Start(e) if e.name().as_ref() == b"node" => {
+                stack.push(parse_node_attrs(&reader, &e)?);
+            }
+            Event::Empty(e) if e.name().as_ref() == b"node" => {
+                let node = parse_node_attrs(&reader, &e)?;
+                attach_node(node, &mut stack, &mut roots);
+            }
+            Event::End(e) if e.name().as_ref() == b"node" => {
+                let node = stack
+                    .pop()
+                    .ok_or_else(|| "XML 结构错误：存在多余的 </node>".to_string())?;
+                attach_node(node, &mut stack, &mut roots);
+            }
+            Event::Eof => break,
+            _ => {}
+        }
+    }
+    if !stack.is_empty() {
+        return Err("XML 结构错误：存在未闭合的 <node>".to_string());
+    }
+    Ok(roots)
+}
+
+fn attach_node(node: RawNode, stack: &mut [RawNode], roots: &mut Vec<RawNode>) {
+    match stack.last_mut() {
+        Some(parent) => parent.children.push(node),
+        None => roots.push(node),
+    }
+}
+
+fn parse_node_attrs(
+    reader: &Reader<&[u8]>,
+    e: &quick_xml::events::BytesStart<'_>,
+) -> Result<RawNode, String> {
+    let mut node = RawNode::default();
+    for attr in e.attributes() {
+        let attr = attr.map_err(|e| format!("属性解析失败: {e}"))?;
+        let value = attr
+            .decode_and_unescape_value(reader.decoder())
+            .map_err(|e| format!("属性值解码失败: {e}"))?
+            .into_owned();
+        match attr.key.as_ref() {
+            b"class" => node.class = value,
+            b"text" => node.text = value,
+            b"content-desc" => node.desc = value,
+            b"bounds" => node.bounds = parse_bounds(&value)?,
+            b"clickable" | b"long-clickable" | b"focusable" | b"scrollable" => {
+                node.interactive |= value == "true";
+            }
+            _ => {}
+        }
+    }
+    Ok(node)
+}
+
+/// 解析 "[l,t][r,b]" 形式的 bounds。
+fn parse_bounds(s: &str) -> Result<(i32, i32, i32, i32), String> {
+    let err = || format!("无法解析 bounds: {s}");
+    let inner = s
+        .strip_prefix('[')
+        .and_then(|v| v.strip_suffix(']'))
+        .ok_or_else(err)?;
+    let (lt, rb) = inner.split_once("][").ok_or_else(err)?;
+    let pair = |p: &str| -> Result<(i32, i32), String> {
+        let (a, b) = p.split_once(',').ok_or_else(err)?;
+        Ok((
+            a.trim().parse().map_err(|_| err())?,
+            b.trim().parse().map_err(|_| err())?,
+        ))
+    };
+    let (l, t) = pair(lt)?;
+    let (r, b) = pair(rb)?;
+    Ok((l, t, r, b))
+}
+
+/// 递归渲染简化树：零面积节点整棵剔除；无内容且不可交互的容器不占行，
+/// 子节点上提到该容器的缩进层级；保留下来的节点子级缩进 +1。
+fn render_node(node: &RawNode, depth: usize, lines: &mut Vec<String>, refs: &mut Vec<ElemRef>) {
+    let (l, t, r, b) = node.bounds;
+    if r <= l || b <= t {
+        return;
+    }
+    let has_content = !node.text.is_empty() || !node.desc.is_empty();
+    let mut child_depth = depth;
+    if node.interactive || has_content {
+        let short_class = node.class.rsplit('.').next().unwrap_or(&node.class);
+        let mut line = format!("{}{}", "  ".repeat(depth), short_class);
+        if !node.text.is_empty() {
+            line.push_str(&format!(" \"{}\"", node.text));
+        }
+        if !node.desc.is_empty() {
+            line.push_str(&format!(" desc:\"{}\"", node.desc));
+        }
+        if node.interactive {
+            let id = format!("@e{}", refs.len() + 1);
+            refs.push(ElemRef {
+                id: id.clone(),
+                text: non_empty(&node.text),
+                content_desc: non_empty(&node.desc),
+                class: non_empty(&node.class),
+                center: ((l + r) / 2, (t + b) / 2),
+                bounds: node.bounds,
+            });
+            line.push_str(&format!(" {id}"));
+        }
+        line.push_str(&format!(" [{l},{t}][{r},{b}]"));
+        lines.push(line);
+        child_depth = depth + 1;
+    }
+    for child in &node.children {
+        render_node(child, child_depth, lines, refs);
+    }
+}
+
+fn non_empty(s: &str) -> Option<String> {
+    if s.is_empty() {
+        None
+    } else {
+        Some(s.to_string())
+    }
 }
 
 #[cfg(test)]
@@ -87,5 +243,59 @@ mod tests {
     #[test]
     fn rejects_invalid_xml() {
         assert!(simplify("<not-closed").is_err());
+    }
+
+    /// 样例：可滚动容器内嵌无内容 LinearLayout，包裹一个按钮
+    const NESTED: &str = r#"<?xml version='1.0' encoding='UTF-8' standalone='yes' ?>
+<hierarchy rotation="0">
+  <node index="0" text="" resource-id="" class="android.widget.ScrollView" package="com.x" content-desc="" checkable="false" checked="false" clickable="false" enabled="true" focusable="false" focused="false" scrollable="true" long-clickable="false" password="false" selected="false" bounds="[0,0][1080,2400]">
+    <node index="0" text="" resource-id="" class="android.widget.LinearLayout" package="com.x" content-desc="" checkable="false" checked="false" clickable="false" enabled="true" focusable="false" focused="false" scrollable="false" long-clickable="false" password="false" selected="false" bounds="[0,100][1080,300]">
+      <node index="0" text="确定" resource-id="" class="android.widget.Button" package="com.x" content-desc="" checkable="false" checked="false" clickable="true" enabled="true" focusable="false" focused="false" scrollable="false" long-clickable="false" password="false" selected="false" bounds="[400,150][680,250]"/>
+    </node>
+  </node>
+</hierarchy>"#;
+
+    #[test]
+    fn lifts_button_out_of_empty_container_with_correct_indent() {
+        let snap = simplify(NESTED).unwrap();
+        // 无内容的 LinearLayout 不单独占行
+        assert!(!snap.tree.contains("LinearLayout"));
+        let lines: Vec<&str> = snap.tree.lines().collect();
+        assert_eq!(lines.len(), 2, "树应为两行：{}", snap.tree);
+        // ScrollView 有引用，位于层级 0；按钮上提到 LinearLayout 的位置，即 ScrollView 之下一级
+        assert!(lines[0].starts_with("ScrollView"), "首行: {}", lines[0]);
+        assert!(
+            lines[1].starts_with("  Button \"确定\""),
+            "次行: {}",
+            lines[1]
+        );
+    }
+
+    #[test]
+    fn scrollable_container_gets_ref() {
+        let snap = simplify(NESTED).unwrap();
+        let ids: Vec<&str> = snap.refs.iter().map(|r| r.id.as_str()).collect();
+        // 先序：ScrollView @e1，按钮 @e2
+        assert_eq!(ids, ["@e1", "@e2"]);
+        assert_eq!(
+            snap.refs[0].class.as_deref(),
+            Some("android.widget.ScrollView")
+        );
+        assert!(snap.tree.lines().next().unwrap().contains("@e1"));
+    }
+
+    #[test]
+    fn shows_content_desc_and_ref() {
+        let xml = r#"<?xml version='1.0' encoding='UTF-8' standalone='yes' ?>
+<hierarchy rotation="0">
+  <node index="0" text="" resource-id="" class="android.widget.ImageButton" package="com.x" content-desc="更多选项" checkable="false" checked="false" clickable="true" enabled="true" focusable="false" focused="false" scrollable="false" long-clickable="false" password="false" selected="false" bounds="[900,50][1030,150]"/>
+</hierarchy>"#;
+        let snap = simplify(xml).unwrap();
+        assert_eq!(snap.refs.len(), 1);
+        assert_eq!(snap.refs[0].content_desc.as_deref(), Some("更多选项"));
+        assert_eq!(snap.refs[0].text, None);
+        // content-desc 展示在树行中
+        assert!(snap.tree.contains("更多选项"), "树: {}", snap.tree);
+        assert!(snap.tree.contains("@e1"));
     }
 }

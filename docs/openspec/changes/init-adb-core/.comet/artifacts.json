@@ -1,0 +1,8 @@
+{
+  "openspec_proposal": "docs/openspec/changes/init-adb-core/proposal.md",
+  "openspec_design": "docs/openspec/changes/init-adb-core/design.md",
+  "openspec_tasks": "docs/openspec/changes/init-adb-core/tasks.md",
+  "openspec_delta_spec": "docs/openspec/changes/init-adb-core/specs/cli-daemon/spec.md",
+  "handoff_context": "docs/openspec/changes/init-adb-core/.comet/handoff/design-context.json",
+  "handoff_markdown": "docs/openspec/changes/init-adb-core/.comet/handoff/design-context.md"
+}
