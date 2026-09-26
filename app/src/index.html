@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <title>Agent Mobile Bridge</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <header class="topbar">
+    <span class="topbar-title">Agent Mobile Bridge</span>
+    <span id="conn-badge" class="badge badge-disconnected">未连接</span>
+  </header>
+
+  <main>
+    <!-- 连接页 -->
+    <section id="page-connect" class="page active">
+      <h2>连接</h2>
+      <label class="field">
+        <span>Daemon 地址</span>
+        <input id="daemon-addr" type="text" inputmode="url" placeholder="192.168.1.10:18777" autocomplete="off" />
+      </label>
+      <label class="field">
+        <span>配对码</span>
+        <input id="pair-code" type="text" inputmode="numeric" maxlength="6" placeholder="6 位配对码" autocomplete="off" />
+      </label>
+      <button id="btn-scan" class="btn btn-secondary" type="button">扫码配对（待接线）</button>
+      <button id="btn-connect" class="btn btn-primary" type="button">连接</button>
+      <div class="status-card">
+        <div class="status-row"><span>连接状态</span><span id="conn-state-text">未连接</span></div>
+        <div class="status-row"><span>设备 ID</span><span id="device-id-text">—</span></div>
+        <div class="status-row"><span>最近心跳</span><span id="heartbeat-text">—</span></div>
+      </div>
+    </section>
+
+    <!-- 能力自检页 -->
+    <section id="page-caps" class="page">
+      <h2>能力自检</h2>
+      <div class="status-card">
+        <div class="status-row"><span>无障碍权限</span><span id="a11y-state" class="badge badge-warn">未开启（mock）</span></div>
+        <button id="btn-a11y-settings" class="btn btn-secondary" type="button">前往无障碍设置（待接线）</button>
+      </div>
+      <ul id="cap-list" class="cap-list">
+        <li><button class="btn btn-cap" data-cap="tap" type="button">tap 点击</button></li>
+        <li><button class="btn btn-cap" data-cap="swipe" type="button">swipe 滑动</button></li>
+        <li><button class="btn btn-cap" data-cap="input" type="button">input 文本输入</button></li>
+        <li><button class="btn btn-cap" data-cap="key" type="button">key 按键</button></li>
+        <li><button class="btn btn-cap" data-cap="uiTree" type="button">uiTree UI 树</button></li>
+        <li><button class="btn btn-cap" data-cap="screenshot" type="button">screenshot 截图</button></li>
+      </ul>
+      <p id="cap-result" class="cap-result"></p>
+    </section>
+
+    <!-- 日志页 -->
+    <section id="page-logs" class="page">
+      <h2>日志</h2>
+      <ul id="log-list" class="log-list"></ul>
+    </section>
+  </main>
+
+  <nav class="tabbar">
+    <button class="tab active" data-page="page-connect" type="button">连接</button>
+    <button class="tab" data-page="page-caps" type="button">自检</button>
+    <button class="tab" data-page="page-logs" type="button">日志</button>
+  </nav>
+
+  <script src="app.js"></script>
+</body>
+</html>

@@ -1,0 +1,7 @@
+{
+  "$schema": "../gen/schemas/mobile-schema.json",
+  "identifier": "default",
+  "description": "默认窗口能力集",
+  "windows": ["main"],
+  "permissions": ["core:default"]
+}

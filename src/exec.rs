@@ -20,15 +20,38 @@ pub struct DaemonState {
     backend: Mutex<Option<Arc<AdbBackend>>>,
     /// 快照引用缓存：设备 ID → 最近一次 snapshot 的元素引用表
     ref_cache: Mutex<HashMap<String, Vec<ElemRef>>>,
+    /// 桥接设备注册表（WS 服务与 executor 共享，design.md 决策 1）
+    bridge: Arc<crate::daemon::registry::BridgeRegistry>,
+    /// 配对认证状态（WS hello 与 HTTP 管理端点共享，design.md 决策 8/14）
+    pairing: Arc<crate::daemon::pair::Pairing>,
 }
 
 impl DaemonState {
     pub fn new(config: Config) -> Arc<Self> {
+        Self::new_in(config, &Config::dir())
+    }
+
+    /// 可注入配置目录的构造（测试用临时目录，避免污染用户 tokens.json）。
+    pub fn new_in(config: Config, dir: &Path) -> Arc<Self> {
         Arc::new(Self {
             config,
             backend: Mutex::new(None),
             ref_cache: Mutex::new(HashMap::new()),
+            bridge: crate::daemon::registry::BridgeRegistry::new(),
+            pairing: Arc::new(crate::daemon::pair::Pairing::new(dir)),
         })
+    }
+
+    pub fn bridge(&self) -> &Arc<crate::daemon::registry::BridgeRegistry> {
+        &self.bridge
+    }
+
+    pub fn pairing(&self) -> &Arc<crate::daemon::pair::Pairing> {
+        &self.pairing
+    }
+
+    pub fn config(&self) -> &Config {
+        &self.config
     }
 
     /// 惰性初始化 ADB 后端；每次未初始化时重试探测（adb 可能后装）。
@@ -56,8 +79,19 @@ impl DaemonState {
     fn run(&self, command: &Command, cwd: &Path) -> Result<Value, ErrorBody> {
         match command {
             Command::Devices => {
-                let devices = self.backend()?.devices()?;
-                Ok(json!({ "devices": devices }))
+                let bridge_devices = self.bridge.device_records();
+                match self.backend().and_then(|b| b.devices()) {
+                    Ok(mut devices) => {
+                        devices.extend(bridge_devices);
+                        Ok(json!({ "devices": devices }))
+                    }
+                    // adb 不可用且无桥接设备时保持原错误；有桥接设备时降级列出并附 adb 错误
+                    Err(e) if bridge_devices.is_empty() => Err(e),
+                    Err(e) => Ok(json!({
+                        "devices": bridge_devices,
+                        "adb_error": e.message,
+                    })),
+                }
             }
             Command::Connect { target } => {
                 let msg = self.backend()?.connect(target)?;
@@ -165,6 +199,9 @@ impl DaemonState {
             | Command::DaemonRestart
             | Command::DaemonStop => Err(ErrorBody::usage(
                 "daemon 生命周期命令只能在本机直接执行，不经 /cmd 转发",
+            )),
+            Command::Pair { .. } => Err(ErrorBody::usage(
+                "pair 是本机管理命令，不经 /cmd 转发（请在 CLI 侧直接执行）",
             )),
         }
     }
@@ -278,7 +315,34 @@ mod tests {
             },
             Path::new("/tmp"),
         );
-        assert!(!out.ok);
-        assert_ne!(out.error.unwrap().code, crate::output::ErrorCode::Usage);
+        // 只对 error 存在时断言非 Usage（单设备环境下命令可能真实成功，不耦合 backend 结果）
+        if let Some(e) = out.error {
+            assert_ne!(e.code, crate::output::ErrorCode::Usage);
+        }
+    }
+
+    #[test]
+    fn devices_merges_bridge_registry_entries() {
+        // 桥接设备已注册但 adb 后端不可用：仍应列出桥接设备（组 5 将完善合并语义）
+        let state = DaemonState::new(Config::default());
+        let (tx, _rx) = tokio::sync::mpsc::unbounded_channel();
+        let hello = crate::bridge_proto::Hello {
+            pairing_code: None,
+            token: Some("t".into()),
+            device_name: "MuMu".into(),
+            android_version: "12".into(),
+            capabilities: vec![crate::bridge_proto::Capability::Tap],
+        };
+        state.bridge().register(&hello, tx);
+        let out = state.execute(&Command::Devices, Path::new("/tmp"));
+        assert!(out.ok, "桥接设备在线时 devices 应成功: {out:?}");
+        let devices = out.result.unwrap()["devices"].clone();
+        let arr = devices.as_array().expect("devices 为数组");
+        let bridge = arr
+            .iter()
+            .find(|d| d["id"] == "bridge:MuMu")
+            .expect("应包含桥接设备");
+        assert_eq!(bridge["connection"], "bridge");
+        assert_eq!(bridge["state"], "online");
     }
 }

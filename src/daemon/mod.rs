@@ -6,6 +6,9 @@
 
 pub mod http;
 pub mod lock;
+pub mod net;
+pub mod pair;
+pub mod registry;
 pub mod ws;
 
 use crate::backend::BResult;
@@ -54,11 +57,13 @@ async fn run_async(config: &Config) -> BResult<()> {
     );
     let shutdown = Arc::new(Notify::new());
     let exec_state = crate::exec::DaemonState::new(config.clone());
+    let registry = Arc::clone(exec_state.bridge());
+    let pairing = Arc::clone(exec_state.pairing());
     tokio::select! {
         result = http::serve(http_listener, Arc::clone(&shutdown), exec_state) => {
             result.map_err(|e| ErrorBody::io_error(format!("HTTP 服务异常退出: {e}")))?;
         }
-        result = ws::serve(ws_listener, Arc::clone(&shutdown)) => {
+        result = ws::serve(ws_listener, Arc::clone(&shutdown), registry, pairing) => {
             result.map_err(|e| ErrorBody::io_error(format!("WS 服务异常退出: {e}")))?;
         }
         _ = tokio::signal::ctrl_c() => {}
@@ -269,10 +274,77 @@ pub fn post_cmd(
     cwd: &std::path::Path,
 ) -> BResult<crate::output::Output> {
     let body = json!({ "args": args, "cwd": cwd }).to_string();
+
     let raw = http_request(port, "POST", "/cmd", Some(&body), Duration::from_secs(120))
         .map_err(|e| ErrorBody::io_error(format!("转发命令到 daemon 失败: {e}")))?;
     serde_json::from_str(&raw)
         .map_err(|e| ErrorBody::io_error(format!("daemon 响应解析失败: {e}（原始响应: {raw}）")))
+}
+/// `pair` / `pair --reset`：经 daemon HTTP 管理端点取配对信息，组装配对 URI 与终端二维码
+///（design.md 决策 8/13；管理端点只绑定 127.0.0.1）。
+pub fn pair(config: &Config, reset: bool) -> BResult<Value> {
+    if reset {
+        http_request(
+            config.http_port,
+            "POST",
+            "/pair-reset",
+            Some("{}"),
+            Duration::from_secs(5),
+        )
+        .map_err(|e| ErrorBody::io_error(format!("POST /pair-reset 失败: {e}")))?;
+    }
+    let body = http_request(
+        config.http_port,
+        "GET",
+        "/pair-info",
+        None,
+        Duration::from_secs(5),
+    )
+    .map_err(|e| ErrorBody::io_error(format!("GET /pair-info 失败: {e}")))?;
+    let info: Value = serde_json::from_str(&body)
+        .map_err(|e| ErrorBody::io_error(format!("/pair-info 响应解析失败: {e}")))?;
+    let code = info["pairing_code"]
+        .as_str()
+        .unwrap_or_default()
+        .to_string();
+    let active = info["code_active"].as_bool().unwrap_or(false);
+    let port = info["port"].as_u64().unwrap_or(config.bridge_port as u64);
+    let ips: Vec<String> = info["ips"]
+        .as_array()
+        .map(|a| {
+            a.iter()
+                .filter_map(|v| v.as_str().map(str::to_string))
+                .collect()
+        })
+        .unwrap_or_default();
+    let host = ips
+        .first()
+        .cloned()
+        .unwrap_or_else(|| "127.0.0.1".to_string());
+    let uri = format!("agent-mobile://pair?host={host}&port={port}&code={code}");
+    let qr = qr_unicode(&uri)?;
+    let mut out = json!({
+        "pairing_code": code,
+        "code_active": active,
+        "ips": ips,
+        "uri": uri,
+        "qr_unicode": qr,
+    });
+    if reset {
+        out["reset"] = json!(true);
+    }
+    Ok(out)
+}
+
+/// 配对 URI 渲染为终端 unicode block 二维码字符串（亮色块为实，适配深色终端背景）。
+fn qr_unicode(content: &str) -> BResult<String> {
+    let code = qrcode::QrCode::new(content.as_bytes())
+        .map_err(|e| ErrorBody::io_error(format!("配对二维码生成失败: {e}")))?;
+    Ok(code
+        .render::<qrcode::render::unicode::Dense1x2>()
+        .dark_color(qrcode::render::unicode::Dense1x2::Light)
+        .light_color(qrcode::render::unicode::Dense1x2::Dark)
+        .build())
 }
 
 /// 极简同步 HTTP/1.1 客户端（CLI 短进程侧使用）；返回响应 body，非 2xx 视为错误。
@@ -413,6 +485,56 @@ mod tests {
         .expect("写入锁文件");
     }
 
+    /// 起真实 HTTP 服务（配对状态用临时目录），返回端口与 shutdown。
+    async fn start_http(dir: &std::path::Path) -> (u16, Arc<Notify>) {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("绑定随机端口");
+        let port = listener.local_addr().expect("读取地址").port();
+        let shutdown = Arc::new(Notify::new());
+        let state = crate::exec::DaemonState::new_in(crate::config::Config::default(), dir);
+        tokio::spawn(http::serve(listener, Arc::clone(&shutdown), state));
+        (port, shutdown)
+    }
+
+    // pair() 内部是阻塞 HTTP 客户端：需多线程运行时，避免阻塞饿死 axum 服务
+    #[tokio::test(flavor = "multi_thread")]
+    async fn pair_outputs_code_ips_uri_and_qr() {
+        let dir = temp_dir();
+        let (port, shutdown) = start_http(dir.path()).await;
+        let config = crate::config::Config {
+            http_port: port,
+            ..Default::default()
+        };
+        let v = pair(&config, false).expect("pair 应成功");
+        let code = v["pairing_code"].as_str().expect("配对码");
+        assert_eq!(code.len(), 6);
+        assert_eq!(v["code_active"], true);
+        assert!(v["ips"].is_array());
+        let uri = v["uri"].as_str().expect("uri");
+        assert!(
+            uri.starts_with("agent-mobile://pair?host="),
+            "uri 前缀: {uri}"
+        );
+        assert!(
+            uri.contains(&format!("&port={}", config.bridge_port)),
+            "uri 端口: {uri}"
+        );
+        assert!(uri.contains(&format!("&code={code}")), "uri 配对码: {uri}");
+        let qr = v["qr_unicode"].as_str().expect("qr_unicode 为字符串字段");
+        assert!(qr.lines().count() > 5, "二维码应多行: {qr}");
+        assert!(
+            qr.chars().any(|c| "█▄▀ ".contains(c) && c != ' '),
+            "应含 unicode block"
+        );
+
+        // --reset：重置标记 + 配对码重新可用
+        let v2 = pair(&config, true).expect("pair --reset 应成功");
+        assert_eq!(v2["reset"], true);
+        assert_eq!(v2["code_active"], true);
+        assert_eq!(v2["pairing_code"].as_str().unwrap().len(), 6);
+        shutdown.notify_one();
+    }
     #[test]
     fn ensure_daemon_port_mismatch_returns_guidance() {
         let dir = temp_dir();

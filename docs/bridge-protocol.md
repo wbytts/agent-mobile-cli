@@ -1,0 +1,170 @@
+# 桥接协议（bridge-protocol）
+
+CLI daemon 与设备端调试 App 之间的 WebSocket 桥接协议。消息类型单一来源为
+`src/bridge_proto.rs`（App Rust core 以 path 引用同一文件，design.md 决策 11）；
+本文档与该文件逐字段一致，修改协议时必须同步更新。
+
+- 传输：WebSocket 文本帧（JSON，UTF-8）；daemon 监听 `127.0.0.1:<bridge_port>`（默认 18777）。
+- 帧上限：默认 16MB；截图等二进制以 base64 内联于 `result`（design.md 决策 15）。
+- 请求关联：`command`/`script` 的 `id` 由 daemon 生成（`cmd-<n>`），App 回传 `result` 携带同一 `id`。
+
+## 消息一览
+
+| type        | 方向           | 用途                                 |
+| ----------- | -------------- | ------------------------------------ |
+| hello       | App → daemon   | 注册握手（配对码或 token 认证）      |
+| hello_ack   | daemon → App   | 握手应答（首次配对下发 token）       |
+| heartbeat   | App → daemon   | 心跳（刷新 last_seen）               |
+| pong        | daemon → App   | 心跳应答                             |
+| command     | daemon → App   | 设备操作命令                         |
+| script      | daemon → App   | 脚本下发（QuickJS 沙盒执行）         |
+| result      | App → daemon   | command/script 执行回传              |
+| result_ack  | daemon → App   | result 接收确认                      |
+
+## App → daemon
+
+### hello
+
+连接建立后首条消息必须是 `hello`（10 秒超时，否则断开）。`pairing_code` 与 `token`
+二选一：首次配对提交配对码；已配对设备凭 token。
+
+```json
+{
+  "type": "hello",
+  "pairing_code": "483920",
+  "device_name": "MuMu",
+  "android_version": "12",
+  "capabilities": ["tap", "swipe", "input", "key", "uiTree", "screenshot", "apps", "launch", "script"]
+}
+```
+
+| 字段            | 类型     | 必填 | 说明                                                         |
+| --------------- | -------- | ---- | ------------------------------------------------------------ |
+| pairing_code    | string   | 否*  | 6 位一次性配对码（首次配对用；与 token 二选一）              |
+| token           | string   | 否*  | 长期 token，64 字符 hex（已配对设备用；与 pairing_code 二选一） |
+| device_name     | string   | 是   | 设备名称；桥接设备 id 为 `bridge:<device_name>`              |
+| android_version | string   | 是   | Android 版本（如 `"12"`）                                    |
+| capabilities    | string[] | 是   | 能力集，取值见下                                             |
+
+`capabilities` 枚举（`Capability`，serde camelCase）：`tap` / `swipe` / `input` /
+`key` / `uiTree` / `screenshot` / `apps` / `launch` / `script`。未知取值反序列化失败，
+视为非法 hello。
+
+### heartbeat
+
+```json
+{ "type": "heartbeat" }
+```
+
+无字段。daemon 刷新该连接的 `last_seen` 并回 `pong`。超过 30 秒无任何消息
+（`HEARTBEAT_TIMEOUT`）设备在枚举中标记为 `offline`；连接断开同样标记离线，
+设备记录保留，重连注册后恢复在线。
+
+### result
+
+`command` / `script` 的执行回传，`id` 与下发帧一致。
+
+```json
+{ "type": "result", "id": "cmd-3", "ok": true, "result": { "tapped": [100, 200] } }
+```
+
+```json
+{ "type": "result", "id": "cmd-4", "ok": false, "error": "element not interactable" }
+```
+
+| 字段   | 类型   | 必填 | 说明                                         |
+| ------ | ------ | ---- | -------------------------------------------- |
+| id     | string | 是   | 与下发的 command/script `id` 一致            |
+| ok     | bool   | 是   | 执行是否成功                                 |
+| result | any    | 否   | 成功时的结构化结果（截图为 base64 PNG 内联） |
+| error  | string | 否   | 失败时的错误描述                             |
+
+daemon 收到后按 `id` 唤醒等待方并回 `result_ack`；未知 `id`（如超时后迟到）静默丢弃。
+
+## daemon → App
+
+### hello_ack
+
+```json
+{ "type": "hello_ack", "ok": true, "token": "9f2c…64hex" }
+```
+
+```json
+{ "type": "hello_ack", "ok": false, "error": "配对码错误或已失效" }
+```
+
+| 字段  | 类型   | 必填 | 说明                                                       |
+| ----- | ------ | ---- | ---------------------------------------------------------- |
+| ok    | bool   | 是   | 认证是否通过                                               |
+| token | string | 否   | 配对码验证通过时新签发的长期 token（token 路径不重复下发） |
+| error | string | 否   | 拒绝原因（配对码错误/失效、token 无效、缺少凭证等）        |
+
+`ok=false` 时 daemon 发送该帧后即断开连接，设备不进入枚举。
+
+### command
+
+```json
+{ "type": "command", "id": "cmd-3", "method": "tap", "params": { "x": 100, "y": 200 } }
+```
+
+| 字段   | 类型   | 必填 | 说明                                                              |
+| ------ | ------ | ---- | ----------------------------------------------------------------- |
+| id     | string | 是   | 请求标识（`cmd-<n>`），result 按此关联                            |
+| method | string | 是   | 动作名：`tap`/`swipe`/`input`/`key`/`uiTree`/`screenshot`/`apps`/`launch` |
+| params | object | 是   | 动作参数（无参数动作传 `{}`）                                     |
+
+### script
+
+```json
+{ "type": "script", "id": "cmd-5", "source": "mobile.tap(100, 200)" }
+```
+
+| 字段   | 类型   | 必填 | 说明                                        |
+| ------ | ------ | ---- | ------------------------------------------- |
+| id     | string | 是   | 请求标识，result 按此关联                   |
+| source | string | 是   | JS 源码（QuickJS 沙盒执行，注入 mobile.* API） |
+
+### result_ack
+
+```json
+{ "type": "result_ack", "id": "cmd-3" }
+```
+
+| 字段 | 类型   | 必填 | 说明                |
+| ---- | ------ | ---- | ------------------- |
+| id   | string | 是   | 已接收的 result `id` |
+
+### pong
+
+```json
+{ "type": "pong" }
+```
+
+无字段。heartbeat 的应答。
+
+## 配对认证流程（design.md 决策 8/14）
+
+1. daemon 启动桥接监听时生成 6 位一次性配对码（首次配对成功或 daemon 重启后失效）。
+2. `agent-mobile-cli pair` 经本机管理端点 `GET /pair-info`（只绑定 127.0.0.1）取配对码、
+   候选局域网 IP（默认路由网卡优先）与桥接端口，输出配对 URI
+   `agent-mobile://pair?host=<ip>&port=<port>&code=<code>` 及终端 unicode 二维码。
+3. App 首次连接提交配对码 → 验证通过签发长期 token（32 字节随机 hex，64 字符），
+   追加记录到 daemon 配置目录 `tokens.json`，配对码同时失效。
+4. 后续连接凭 token 认证直过；`agent-mobile-cli pair --reset`（`POST /pair-reset`）
+   重新生成配对码并清空全部已签发 token。
+
+## 连接生命周期
+
+```text
+App                daemon
+ |--- WS 握手 ------>|
+ |--- hello -------->|  认证（配对码签发 token / token 直过 / 拒绝）
+ |<-- hello_ack -----|  ok=false 即断开
+ |                   |  注册到设备注册表（id = bridge:<device_name>）
+ |--- heartbeat ---->|
+ |<-- pong ----------|  刷新 last_seen
+ |<-- command -------|  executor 路由（组 5 经 BridgeRegistry.command/script）
+ |--- result ------->|  按 id 唤醒等待方
+ |<-- result_ack ----|
+ |--- 断开 --------->|  标记离线（记录保留，重连注册恢复在线）
+```

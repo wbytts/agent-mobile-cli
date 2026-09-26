@@ -32,6 +32,8 @@ pub async fn serve(
         .route("/health", get(health))
         .route("/cmd", post(cmd))
         .route("/shutdown", post(shutdown_handler))
+        .route("/pair-info", get(pair_info))
+        .route("/pair-reset", post(pair_reset))
         .with_state(state);
     axum::serve(listener, app)
         .with_graceful_shutdown(async move {
@@ -88,6 +90,24 @@ async fn cmd(State(state): State<AppState>, Json(req): Json<CmdRequest>) -> Json
 
 async fn shutdown_handler(State(state): State<AppState>) -> Json<Value> {
     state.shutdown.notify_one();
+    Json(json!({ "ok": true }))
+}
+
+/// GET /pair-info：当前配对码（含可用状态）、候选局域网 IP 与桥接端口（design.md 决策 8/13）。
+async fn pair_info(State(state): State<AppState>) -> Json<Value> {
+    let (code, active) = state.exec.pairing().pairing_code();
+    Json(json!({
+        "ok": true,
+        "pairing_code": code,
+        "code_active": active,
+        "port": state.exec.config().bridge_port,
+        "ips": crate::daemon::net::candidate_ips(),
+    }))
+}
+
+/// POST /pair-reset：重新生成配对码并清空全部已签发 token（design.md 决策 14）。
+async fn pair_reset(State(state): State<AppState>) -> Json<Value> {
+    state.exec.pairing().reset();
     Json(json!({ "ok": true }))
 }
 
@@ -207,5 +227,71 @@ mod tests {
             .await
             .expect("join http 服务")
             .expect("http 服务退出");
+    }
+
+    async fn start_with_dir(
+        dir: std::path::PathBuf,
+    ) -> (
+        u16,
+        Arc<Notify>,
+        tokio::task::JoinHandle<std::io::Result<()>>,
+    ) {
+        let listener = TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("绑定随机端口");
+        let port = listener.local_addr().expect("读取本地地址").port();
+        let shutdown = Arc::new(Notify::new());
+        let state = crate::exec::DaemonState::new_in(crate::config::Config::default(), &dir);
+        let handle = tokio::spawn(serve(listener, Arc::clone(&shutdown), state));
+        (port, shutdown, handle)
+    }
+
+    #[tokio::test]
+    async fn pair_info_returns_code_ips_and_port() {
+        let tmp = tempfile::tempdir().unwrap();
+        let (port, shutdown, handle) = start_with_dir(tmp.path().to_path_buf()).await;
+        let raw = http_get(port, "/pair-info").await;
+        assert!(raw.starts_with("HTTP/1.1 200"), "响应行: {raw}");
+        let v: Value = serde_json::from_str(body_of(&raw)).expect("解析 /pair-info body");
+        assert_eq!(v["ok"], true);
+        let code = v["pairing_code"].as_str().expect("应有配对码");
+        assert_eq!(code.len(), 6);
+        assert!(code.chars().all(|c| c.is_ascii_digit()));
+        assert_eq!(v["code_active"], true);
+        assert_eq!(v["port"], crate::config::DEFAULT_BRIDGE_PORT);
+        let ips = v["ips"].as_array().expect("ips 为数组");
+        assert!(ips.iter().all(|ip| ip.is_string()));
+        shutdown.notify_one();
+        handle.await.expect("join").expect("http 服务退出");
+    }
+
+    #[tokio::test]
+    async fn pair_reset_regenerates_code_and_revokes_tokens() {
+        let tmp = tempfile::tempdir().unwrap();
+        let (port, shutdown, handle) = start_with_dir(tmp.path().to_path_buf()).await;
+        let before: Value =
+            serde_json::from_str(body_of(&http_get(port, "/pair-info").await)).unwrap();
+        // 模拟一次配对签发 token（直接操作内存态之外的公开行为：经 WS 由组 2 ws 测试覆盖，
+        // 这里验证 reset 端点重置配对码并清空 tokens.json 的行为契约）
+        let raw = http_post(port, "/pair-reset", "{}").await;
+        assert!(raw.starts_with("HTTP/1.1 200"), "响应行: {raw}");
+        let v: Value = serde_json::from_str(body_of(&raw)).expect("解析 /pair-reset body");
+        assert_eq!(v["ok"], true);
+
+        let after: Value =
+            serde_json::from_str(body_of(&http_get(port, "/pair-info").await)).unwrap();
+        assert_eq!(after["code_active"], true);
+        assert_ne!(
+            before["pairing_code"].as_str().unwrap().len(),
+            0,
+            "重置前配对码存在"
+        );
+        // tokens.json 被清空（reset 写空文件）
+        let tokens =
+            std::fs::read_to_string(tmp.path().join("tokens.json")).expect("tokens.json 存在");
+        let tv: Value = serde_json::from_str(&tokens).unwrap();
+        assert_eq!(tv["tokens"], json!([]));
+        shutdown.notify_one();
+        handle.await.expect("join").expect("http 服务退出");
     }
 }

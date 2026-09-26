@@ -103,6 +103,12 @@ pub enum Command {
     },
     /// 查看 daemon 状态
     DaemonStatus,
+    /// 显示桥接配对信息（配对码/候选局域网地址/配对二维码）
+    Pair {
+        /// 重新生成配对码并使全部已签发 token 失效
+        #[arg(long)]
+        reset: bool,
+    },
     /// 重启 daemon
     DaemonRestart,
     /// 停止 daemon
@@ -238,5 +244,13 @@ mod tests {
     #[test]
     fn shell_requires_cmd() {
         assert!(Cli::try_parse_from(["agent-mobile-cli", "shell"]).is_err());
+    }
+
+    #[test]
+    fn parses_pair() {
+        let cli = Cli::try_parse_from(["agent-mobile-cli", "pair"]).unwrap();
+        assert_eq!(cli.command, Command::Pair { reset: false });
+        let cli = Cli::try_parse_from(["agent-mobile-cli", "pair", "--reset"]).unwrap();
+        assert_eq!(cli.command, Command::Pair { reset: true });
     }
 }

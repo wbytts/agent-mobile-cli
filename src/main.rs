@@ -1,5 +1,6 @@
 mod adb;
 mod backend;
+mod bridge_proto;
 mod cli;
 mod config;
 mod daemon;
@@ -38,6 +39,16 @@ fn run(command: cli::Command) -> Output {
             Ok(()) => Output::success(serde_json::json!({ "stopped": true })),
             Err(e) => err_output(e),
         },
+        Pair { reset } => {
+            // 配对信息管理命令：确保 daemon 后读本机管理端点（design.md 决策 8）
+            if let Err(e) = daemon::ensure_daemon(&cfg) {
+                return err_output(e);
+            }
+            match daemon::pair(&cfg, reset) {
+                Ok(info) => Output::success(info),
+                Err(e) => err_output(e),
+            }
+        }
         DaemonRestart => {
             if daemon::health_check(cfg.http_port) {
                 if let Err(e) = daemon::stop(&cfg) {
