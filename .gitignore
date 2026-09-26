@@ -3,3 +3,7 @@
 /.comet/*
 !/.comet/config.yaml
 # <<< Comet managed project state <<<
+
+/.codegraph/
+/target/
+node_modules/
