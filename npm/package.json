@@ -1,6 +1,6 @@
 {
   "name": "agent-mobile-cli",
-  "version": "0.1.0",
+  "version": "0.0.1",
   "description": "面向 Agent 的 Android 设备感知与控制 CLI（ADB 直连 + 调试 App 桥接）",
   "license": "MIT",
   "bin": {
@@ -9,9 +9,29 @@
   "files": [
     "bin",
     "vendor",
-    "postinstall.js"
+    "postinstall.js",
+    "skills",
+    "README.md"
   ],
   "scripts": {
+    "prepack": "node -e \"const fs=require('fs');fs.rmSync('skills',{recursive:true,force:true});fs.cpSync('../skills','skills',{recursive:true});fs.copyFileSync('../README.md','README.md')\"",
     "postinstall": "node postinstall.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/sleepinginsummer/agent-mobile-cli.git"
+  },
+  "homepage": "https://github.com/sleepinginsummer/agent-mobile-cli#readme",
+  "keywords": [
+    "android",
+    "adb",
+    "mobile",
+    "agent",
+    "cli",
+    "automation",
+    "mcp"
+  ],
+  "engines": {
+    "node": ">=16"
   }
 }

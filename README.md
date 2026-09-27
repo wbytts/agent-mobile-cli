@@ -2,8 +2,14 @@
 
 面向 Agent 的 Android 设备感知与控制 CLI：把真实 Android 设备变成可复用的 UI 快照、点击/滑动/输入、截图、应用管理、logcat 与 shell 能力。架构参照 [agent-browser-cli](https://github.com/sleepinginsummer/agent-browser-cli)（CLI + 常驻 daemon），移动端版本。
 
-- **ADB 直连模式**（当前）：复用主机 adb，无需在设备安装任何组件
-- **调试 App 代理模式**（规划中）：Tauri 2 调试 App 经 WS 桥接接入，支持设备端脚本沙盒
+- **ADB 直连模式**：复用主机 adb，无需在设备安装任何组件
+- **调试 App 代理模式**：Tauri 2 调试 App（Agent Mobile Bridge）经 WS 桥接接入，设备端 QuickJS 脚本沙盒（`mobile.*` API），扫码配对即可用
+
+## AI 一句话安装
+
+```text
+请阅读 https://github.com/wbytts/agent-mobile-cli/blob/main/AI_INSTALL.md，按说明安装 CLI、配置 skill，并按需完成手机 App（Agent Mobile Bridge）安装与配对。
+```
 
 ## 安装
 
