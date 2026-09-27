@@ -12,7 +12,14 @@ node_modules/
 
 # app/ Tauri 工程构建产物
 /app/src-tauri/target/
-/app/src-tauri/gen/
+/app/src-tauri/gen/schemas
+# gen/android 工程文件需提交（CI APK 构建），仅排除构建产物
+/app/src-tauri/gen/android/app/build/
+/app/src-tauri/gen/android/build/
+/app/src-tauri/gen/android/.gradle/
+/app/src-tauri/gen/android/.kotlin/
+/app/src-tauri/gen/android/local.properties
+/app/src-tauri/gen/android/app/.cxx/
 /app/android-plugin/build/
 npm/skills/
 npm/README.md

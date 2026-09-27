@@ -54,7 +54,7 @@ jobs:
           asset="agent-mobile-cli-${{ matrix.plat }}"
           if [ "${{ matrix.plat }}" = "win32-x64" ]; then exe="$exe.exe"; asset="$asset.exe"; fi
           cp "target/${{ matrix.target }}/release/$exe" "dist/release-assets/$asset"
-          shasum -a 256 "dist/release-assets/$asset" >> dist/release-assets/checksums.txt
+          node -e "const c=require('crypto'),f=require('fs'),p=require('path');const t='dist/release-assets/$asset';f.appendFileSync('dist/release-assets/checksums.txt',c.createHash('sha256').update(f.readFileSync(t)).digest('hex')+'  '+p.basename(t)+'\n')"
           cat dist/release-assets/checksums.txt
 
       - uses: actions/upload-artifact@v4
@@ -100,7 +100,7 @@ jobs:
           mkdir -p dist/release-assets
           cp app/src-tauri/gen/android/app/build/outputs/apk/universal/debug/app-universal-debug.apk \
              dist/release-assets/agent-mobile-bridge.apk
-          shasum -a 256 dist/release-assets/agent-mobile-bridge.apk >> dist/release-assets/checksums.txt
+          node -e "const c=require('crypto'),f=require('fs'),p=require('path');const t='dist/release-assets/agent-mobile-bridge.apk';f.appendFileSync('dist/release-assets/checksums.txt',c.createHash('sha256').update(f.readFileSync(t)).digest('hex')+'  '+p.basename(t)+'\n')"
 
       - uses: actions/upload-artifact@v4
         with:

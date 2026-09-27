@@ -1,0 +1,6 @@
+include ':app'
+// Kotlin 源码位于 git 跟踪的 app/android-plugin（gen 目录不入库），以库模块并入构建
+include ':android-plugin'
+project(':android-plugin').projectDir = new File(rootDir, '../../../android-plugin')
+
+apply from: 'tauri.settings.gradle'
