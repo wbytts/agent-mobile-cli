@@ -54,7 +54,7 @@ jobs:
           asset="agent-mobile-cli-${{ matrix.plat }}"
           if [ "${{ matrix.plat }}" = "win32-x64" ]; then exe="$exe.exe"; asset="$asset.exe"; fi
           cp "target/${{ matrix.target }}/release/$exe" "dist/release-assets/$asset"
-          sha256sum "dist/release-assets/$asset" >> dist/release-assets/checksums.txt
+          shasum -a 256 "dist/release-assets/$asset" >> dist/release-assets/checksums.txt
           cat dist/release-assets/checksums.txt
 
       - uses: actions/upload-artifact@v4
@@ -81,7 +81,7 @@ jobs:
       - name: 安装 cargo-tauri（预编译）
         uses: taiki-e/install-action@v2
         with:
-          tool: cargo-tauri
+          tool: tauri-cli
 
       - name: 确认 NDK（runner 预装 Android SDK/NDK）
         run: |
@@ -100,7 +100,7 @@ jobs:
           mkdir -p dist/release-assets
           cp app/src-tauri/gen/android/app/build/outputs/apk/universal/debug/app-universal-debug.apk \
              dist/release-assets/agent-mobile-bridge.apk
-          sha256sum dist/release-assets/agent-mobile-bridge.apk >> dist/release-assets/checksums.txt
+          shasum -a 256 dist/release-assets/agent-mobile-bridge.apk >> dist/release-assets/checksums.txt
 
       - uses: actions/upload-artifact@v4
         with:
