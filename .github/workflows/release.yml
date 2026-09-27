@@ -54,8 +54,8 @@ jobs:
           asset="agent-mobile-cli-${{ matrix.plat }}"
           if [ "${{ matrix.plat }}" = "win32-x64" ]; then exe="$exe.exe"; asset="$asset.exe"; fi
           cp "target/${{ matrix.target }}/release/$exe" "dist/release-assets/$asset"
-          node -e "const c=require('crypto'),f=require('fs'),p=require('path');const t='dist/release-assets/$asset';f.appendFileSync('dist/release-assets/checksums.txt',c.createHash('sha256').update(f.readFileSync(t)).digest('hex')+'  '+p.basename(t)+'\n')"
-          cat dist/release-assets/checksums.txt
+          node -e "const c=require('crypto'),f=require('fs'),p=require('path');const t='dist/release-assets/$asset';f.writeFileSync('dist/release-assets/checksums-${{ matrix.plat }}.part',c.createHash('sha256').update(f.readFileSync(t)).digest('hex')+'  '+p.basename(t)+'\n')"
+          cat dist/release-assets/checksums-*.part
 
       - uses: actions/upload-artifact@v4
         with:
@@ -100,7 +100,7 @@ jobs:
           mkdir -p dist/release-assets
           cp app/src-tauri/gen/android/app/build/outputs/apk/universal/debug/app-universal-debug.apk \
              dist/release-assets/agent-mobile-bridge.apk
-          node -e "const c=require('crypto'),f=require('fs'),p=require('path');const t='dist/release-assets/agent-mobile-bridge.apk';f.appendFileSync('dist/release-assets/checksums.txt',c.createHash('sha256').update(f.readFileSync(t)).digest('hex')+'  '+p.basename(t)+'\n')"
+          node -e "const c=require('crypto'),f=require('fs'),p=require('path');const t='dist/release-assets/agent-mobile-bridge.apk';f.writeFileSync('dist/release-assets/checksums-apk.part',c.createHash('sha256').update(f.readFileSync(t)).digest('hex')+'  '+p.basename(t)+'\n')"
 
       - uses: actions/upload-artifact@v4
         with:
@@ -119,11 +119,11 @@ jobs:
           merge-multiple: true
           path: dist/release-assets
 
-      - name: 汇总校验清单（按文件名排序去重）
+      - name: 汇总校验清单（合并各 job 独立 part，防同名覆盖）
         run: |
           cd dist/release-assets
-          sort -t' ' -k3 -u checksums.txt > checksums.sorted || sort -u checksums.txt > checksums.sorted
-          mv checksums.sorted checksums.txt
+          cat checksums-*.part | sort -u -k2 > checksums.txt
+          rm -f checksums-*.part
           ls -la && cat checksums.txt
 
       - name: 解析 tag
