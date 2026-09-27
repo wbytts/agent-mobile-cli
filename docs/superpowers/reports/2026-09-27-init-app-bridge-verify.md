@@ -7,7 +7,7 @@
 | Dimension | Status |
 |---|---|
 | Completeness | 17/17 tasks，10 需求全部实现（1 场景真机段待用户验收） |
-| Correctness | 20 场景：19 实测通过，1（真机相机扫码）未验证 |
+| Correctness | 20/20 场景实测通过（真机段归档后补验） |
 | Coherence | 15/15 design 决策遵循，无 spec 漂移 |
 
 ## 检查证据（Runtime 记录）
@@ -69,7 +69,9 @@ verify_failures: 1（FixReview IMPORTANT → verify-fail → 修复 → 复验�
 
 ## WARNING
 
-1. **真机相机扫码未端到端验证**（agent-app「扫码快速配对」场景真机段）：URI 解析分支已实测，相机扫码链路（ScanActivity + ML Kit → URI）未在物理设备跑通。原因：真机 192.168.2.5:5555 adb 掉线，装 APK 需用户重开无线调试。影响范围：仅真机相机入口；手动输入配对码路径不受影响。建议：用户配合完成真机扫码验收，或接受偏差留待后续版本。
+无遗留。
+
+~~1. 真机相机扫码未端到端验证~~ **已补验（2026-09-27，归档后补充验收）**：真机 NTH-AN00（荣耀，USB adb AEFUUT1A12000052，1080x2340）装 APK → 相机扫终端二维码（`agent-mobile://pair?host=192.168.2.38&port=18777&code=858164`）→ 配对 online → 六项全过：扫码配对 / snapshot（真实 UI 树）/ screenshot（PNG 134KB）/ script 沙盒回传 / @eN 引用点击（设置→移动网络页跳转）/ 杀 App 重开 token 免配对自动重连。20/20 场景至此全部实测通过。
 
 ## SUGGESTION
 
@@ -77,4 +79,4 @@ verify_failures: 1（FixReview IMPORTANT → verify-fail → 修复 → 复验�
 
 ## 最终评估
 
-No critical issues found in the checks that ran. 1 WARNING（真机相机扫码）待用户验收决策；1 SUGGESTION。10/10 需求实现，19/20 场景实测通过，15/15 design 决策遵循。
+No critical issues. 10/10 需求实现，**20/20 场景实测通过**（真机扫码段 2026-09-27 补验），15/15 design 决策遵循，1 SUGGESTION。Ready for archive — 已归档（a55fff7），真机补验记录为归档后补充。
