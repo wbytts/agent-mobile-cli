@@ -8,7 +8,6 @@
   },
   "files": [
     "bin",
-    "vendor",
     "postinstall.js",
     "skills",
     "README.md"
