@@ -2,6 +2,8 @@
 comet_change: init-app-bridge
 role: technical-design
 canonical_spec: openspec
+archived-with: 2026-09-27-init-app-bridge
+status: final
 ---
 
 # Design

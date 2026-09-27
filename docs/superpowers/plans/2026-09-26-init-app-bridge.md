@@ -2,6 +2,7 @@
 change: init-app-bridge
 design-doc: docs/openspec/changes/init-app-bridge/design.md
 base-ref: 8749d16f0ee0b4ad5d55b93d014e5c0f5d39b1c5
+archived-with: 2026-09-27-init-app-bridge
 ---
 
 # 实施计划：init-app-bridge
