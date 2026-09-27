@@ -1,0 +1,5 @@
+# 交叉编译链接器配置（仅影响对应 target，不影响本机构建）
+# win-x64 发布构建：brew install mingw-w64 && rustup target add x86_64-pc-windows-gnu
+#   cargo build --release --target x86_64-pc-windows-gnu
+[target.x86_64-pc-windows-gnu]
+linker = "x86_64-w64-mingw32-gcc"
