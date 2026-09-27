@@ -23,11 +23,11 @@ jobs:
       matrix:
         include:
           # runner 原生平台直接编；asset 名与 npm postinstall 下载约定一致
-          { os: macos-14, target: aarch64-apple-darwin, plat: darwin-arm64 }
-          { os: macos-14, target: x86_64-apple-darwin, plat: darwin-x64 }
-          { os: ubuntu-22.04, target: x86_64-unknown-linux-gnu, plat: linux-x64 }
-          { os: ubuntu-22.04, target: aarch64-unknown-linux-gnu, plat: linux-arm64, cross: true }
-          { os: windows-2022, target: x86_64-pc-windows-msvc, plat: win32-x64 }
+          - { os: macos-14, target: aarch64-apple-darwin, plat: darwin-arm64 }
+          - { os: macos-14, target: x86_64-apple-darwin, plat: darwin-x64 }
+          - { os: ubuntu-22.04, target: x86_64-unknown-linux-gnu, plat: linux-x64 }
+          - { os: ubuntu-22.04, target: aarch64-unknown-linux-gnu, plat: linux-arm64, cross: true }
+          - { os: windows-2022, target: x86_64-pc-windows-msvc, plat: win32-x64 }
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
