@@ -22,7 +22,13 @@ npm install -g agent-mobile-cli
 agent-mobile-cli --help
 ```
 
-npm 包按平台预置原生二进制（`npm/vendor/<platform>-<arch>/`），postinstall 自动定位；未覆盖的平台会给出警告并提示源码构建，安装本身不会失败。
+npm 包的 CLI 二进制在安装时从 GitHub Releases 下载（逐源 sha256 校验）。GitHub 访问慢时脚本会自动尝试内置加速代理（ghfast.top / gh-proxy.com / gh.llkk.cc）；也可显式指定代理前缀：
+
+```bash
+AGENT_MOBILE_CLI_GH_PROXY=https://ghfast.top npm install -g agent-mobile-cli
+```
+
+未覆盖的平台会给出警告并提示源码构建，安装本身不会失败。
 
 源码构建回退：
 
