@@ -1,0 +1,58 @@
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.09s
+     Running unittests src/lib.rs (mobile-debug-proxy-server/target/debug/deps/mobile_debug_proxy_server-4d9fa692422ca36f)
+
+running 38 tests
+test bridge_proto::tests::all_capabilities_parse ... ok
+test bridge_proto::tests::unknown_type_rejected ... ok
+test bridge_proto::tests::daemon_messages_serialize_with_type_tag ... ok
+test bridge_proto::tests::heartbeat_and_result_parse ... ok
+test bridge_proto::tests::daemon_messages_roundtrip_via_deserialize ... ok
+test bridge_proto::tests::hello_with_token_path ... ok
+test bridge_proto::tests::hello_with_pairing_code_roundtrip ... ok
+test auth::tests::healthz_免认证 ... ok
+test http::tests::pairing_codes_签发 ... ok
+test auth::tests::缺失凭证_401 ... ok
+test http::tests::command_设备离线立即404 ... ok
+test http::tests::rfc3339_纪元与已知时刻 ... ok
+test http::tests::command_中继成功 ... ok
+test auth::tests::错误凭证拒绝_合法放行 ... ok
+test http::tests::pairing_reset_吊销并断开设备 ... ok
+test store::tests::注入_owner_token_追加且幂等 ... ok
+test http::tests::devices_跨owner隔离 ... ok
+test store::tests::配对码签发与一次性消费 ... ok
+test http::tests::devices_枚举字段与在线状态 ... ok
+test store::tests::首启生成_owner_token_并落盘 ... ok
+test store::tests::设备配对_加载保存_roundtrip ... ok
+test store::tests::重置不波及其他_owner ... ok
+test http::tests::reset后重新配对_配对码一次性 ... FAILED
+test http::tests::script_中继成功 ... ok
+test store::tests::配对重置_吊销全部设备token_并重新出码 ... ok
+test ws::tests::token_hello_恢复在线 ... ok
+test ws::tests::ws别名路径_同样完成配对握手 ... ok
+test ws::tests::配对码hello_签发设备token ... ok
+test ws::tests::心跳回pong ... ok
+test ws::tests::非法凭证拒绝并断开 ... ok
+test ws::tests::非法设备名拒绝并断开 ... ok
+test ws::tests::断开重连恢复在线 ... ok
+test http::tests::command_串行下发 ... ok
+test http::tests::command_超时与迟到result丢弃 ... ok
+test ws::tests::hello_与reset互斥_持锁期间阻塞 ... ok
+test ws::tests::hello超时断开 ... ok
+test store::tests::touch_刷新_last_seen ... ok
+test ws::tests::静默超时标离线_记录保留 ... ok
+
+failures:
+
+---- http::tests::reset后重新配对_配对码一次性 stdout ----
+
+thread 'http::tests::reset后重新配对_配对码一次性' (103607353) panicked at src/http.rs:312:50:
+called `Option::unwrap()` on a `None` value
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    http::tests::reset后重新配对_配对码一次性
+
+test result: FAILED. 37 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.55s
+
+error: test failed, to rerun pass `--lib`

@@ -59,12 +59,14 @@ pub struct LogEntry {
     pub message: String,
 }
 
-/// 扫码配对 URI 解析结果（`agent-mobile://pair?host=..&port=..&code=..`）。
+/// 扫码配对 URI 解析结果（`agent-mobile://pair?host=..&port=..&code=..[&scheme=wss]`）。
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct PairInfo {
     pub host: String,
     pub port: u16,
     pub code: String,
+    /// TLS 反代部署时携带 `wss`（FixReview SUGGESTION）；本地 daemon 配对无此参数。
+    pub scheme: Option<String>,
 }
 
 /// 已保存的 daemon 地址（连接页回填 / 冷启动自动连接）。
@@ -107,6 +109,8 @@ pub struct Session {
     host: String,
     port: u16,
     pairing_code: Option<String>,
+    /// 完整 WS URL 覆盖（代理服务器 ws(s):// 形式；None 时回退 ws://host:port/ws，决策 12）
+    ws_url: Option<String>,
     state: ConnState,
 }
 
@@ -124,8 +128,22 @@ impl Session {
             host,
             port,
             pairing_code,
+            ws_url: None,
             state: ConnState::Disconnected,
         }
+    }
+
+    /// 设置完整 WS URL 覆盖（代理目标；host/port 保留作 token 存储键）。
+    pub fn with_ws_url(mut self, url: Option<String>) -> Self {
+        self.ws_url = url;
+        self
+    }
+
+    /// 实际连接的 WS URL：显式覆盖优先，否则 legacy daemon 路径。
+    pub fn ws_url(&self) -> String {
+        self.ws_url
+            .clone()
+            .unwrap_or_else(|| format!("ws://{}:{}/ws", self.host, self.port))
     }
 
     pub fn state(&self) -> &ConnState {
@@ -318,7 +336,18 @@ pub fn parse_pair_uri(uri: &str) -> Result<PairInfo, String> {
     if code.is_empty() {
         return Err("配对 URI 的 code 为空".to_string());
     }
-    Ok(PairInfo { host, port, code })
+    // 可选 scheme 参数：仅接受 ws/wss，其他值视为本地 daemon 配对忽略。
+    let scheme = parsed
+        .query_pairs()
+        .find(|(k, _)| k == "scheme")
+        .map(|(_, v)| v.into_owned())
+        .filter(|s| s == "ws" || s == "wss");
+    Ok(PairInfo {
+        host,
+        port,
+        code,
+        scheme,
+    })
 }
 
 // ---------- 异步传输循环（连接/心跳/重连；Android 运行时使用，核心逻辑由上方单测覆盖） ----------
@@ -363,13 +392,15 @@ impl BridgeController {
         self.state.lock().clone()
     }
 
-    /// 启动连接任务；已有任务先中止。连接参数校验失败返回 Err。
+    /// 启动连接任务；已有任务先中止（切换目标先断开原连接）。连接参数校验失败返回 Err。
+    /// `url` 为完整 WS URL（代理服务器 ws(s):// 形式）；None 时按 host/port 走 legacy 路径。
     pub fn connect(
         &self,
         app: AppHandle,
         host: String,
         port: u16,
         pairing_code: Option<String>,
+        url: Option<String>,
     ) -> Result<(), String> {
         let host = host.trim().to_string();
         if host.is_empty() {
@@ -383,7 +414,10 @@ impl BridgeController {
             (!c.is_empty()).then_some(c)
         });
         self.abort_task();
-        emit_log(&app, "info", format!("连接 ws://{host}:{port}/ws"));
+        let display = url
+            .clone()
+            .unwrap_or_else(|| format!("ws://{host}:{port}/ws"));
+        emit_log(&app, "info", format!("连接 {display}"));
         let handle = tauri::async_runtime::spawn(run(
             app,
             self.platform.clone(),
@@ -391,6 +425,7 @@ impl BridgeController {
             host,
             port,
             pairing_code,
+            url,
             self.state.clone(),
         ));
         *self.task.lock() = Some(handle);
@@ -444,10 +479,12 @@ async fn run(
     host: String,
     port: u16,
     pairing_code: Option<String>,
+    url: Option<String>,
     shared_state: Arc<parking_lot::Mutex<ConnState>>,
 ) {
     platform.set_foreground(true);
-    let mut session = Session::new(platform.clone(), ops, host, port, pairing_code);
+    let mut session =
+        Session::new(platform.clone(), ops, host, port, pairing_code).with_ws_url(url);
     let mut attempt = 0u32;
     loop {
         set_state(&app, &shared_state, ConnState::Connecting);
@@ -489,7 +526,7 @@ async fn serve_once(
     shared_state: &Arc<parking_lot::Mutex<ConnState>>,
     session: &mut Session,
 ) -> ServeOutcome {
-    let url = format!("ws://{}:{}/ws", session.host(), session.port());
+    let url = session.ws_url();
     let (mut ws, _) = match tokio_tungstenite::connect_async(&url).await {
         Ok(v) => v,
         Err(e) => {
@@ -762,6 +799,29 @@ mod tests {
             18777,
             code.map(str::to_string),
         )
+    }
+
+    #[test]
+    fn ws_url_defaults_to_legacy_daemon_path() {
+        let s = session(
+            Arc::new(MemoryPlatform::new()),
+            Arc::new(MockOps::new()),
+            None,
+        );
+        assert_eq!(s.ws_url(), "ws://192.168.1.10:18777/ws");
+    }
+
+    #[test]
+    fn ws_url_uses_full_url_when_provided() {
+        let s = session(
+            Arc::new(MemoryPlatform::new()),
+            Arc::new(MockOps::new()),
+            None,
+        )
+        .with_ws_url(Some("wss://debug.example.com/ws/device".to_string()));
+        assert_eq!(s.ws_url(), "wss://debug.example.com/ws/device");
+        // host/port 仍保留（token 存储键与重连展示用）
+        assert_eq!(s.host(), "192.168.1.10");
     }
 
     #[test]
@@ -1039,8 +1099,22 @@ mod tests {
                 host: "192.168.1.10".to_string(),
                 port: 18777,
                 code: "483920".to_string(),
+                scheme: None,
             }
         );
+    }
+
+    /// 代理 TLS 部署：URI 携带 scheme=wss（FixReview SUGGESTION），App 按 wss:// 反代连接。
+    #[test]
+    fn parse_pair_uri_with_wss_scheme() {
+        let info = parse_pair_uri(
+            "agent-mobile://pair?host=debug.example.com&port=443&code=483920&scheme=wss",
+        )
+        .unwrap();
+        assert_eq!(info.scheme.as_deref(), Some("wss"));
+        // 非法 scheme 值忽略（按本地 daemon 处理）
+        let info = parse_pair_uri("agent-mobile://pair?host=a&port=1&code=2&scheme=http").unwrap();
+        assert_eq!(info.scheme, None);
     }
 
     #[test]

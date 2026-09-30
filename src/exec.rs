@@ -5,7 +5,7 @@
 
 use crate::backend::adb::AdbBackend;
 use crate::backend::bridge::AppBridgeBackend;
-use crate::backend::{Backend, BackendKind, DeviceRecord, DeviceState, TapTarget};
+use crate::backend::{BResult, Backend, BackendKind, DeviceRecord, DeviceState, TapTarget};
 use crate::cli::Command;
 use crate::config::Config;
 use crate::output::{ErrorBody, Output};
@@ -25,6 +25,8 @@ pub struct DaemonState {
     bridge: Arc<crate::daemon::registry::BridgeRegistry>,
     /// 桥接后端实例（持有 BridgeRegistry 句柄，按设备记录路由，design.md 决策 10）
     bridge_backend: Arc<AppBridgeBackend>,
+    /// 公网代理后端（配置 proxy 段时实时查询代理服务，mobile-debug-proxy 决策 2/11）
+    proxy_backend: Arc<crate::backend::proxy::ProxyBackend>,
     /// 配对认证状态（WS hello 与 HTTP 管理端点共享，design.md 决策 8/14）
     pairing: Arc<crate::daemon::pair::Pairing>,
 }
@@ -38,12 +40,15 @@ impl DaemonState {
     pub fn new_in(config: Config, dir: &Path) -> Arc<Self> {
         let bridge = crate::daemon::registry::BridgeRegistry::new();
         Arc::new(Self {
-            config,
             backend: Mutex::new(None),
             ref_cache: Mutex::new(HashMap::new()),
             bridge_backend: Arc::new(AppBridgeBackend::new(Arc::clone(&bridge))),
+            proxy_backend: Arc::new(crate::backend::proxy::ProxyBackend::new(
+                config.proxy.as_ref(),
+            )),
             bridge,
             pairing: Arc::new(crate::daemon::pair::Pairing::new(dir)),
+            config,
         })
     }
 
@@ -71,16 +76,40 @@ impl DaemonState {
         Ok(backend)
     }
 
-    /// 目标设备解析：合并 adb 与桥接设备的在线集合统一解析（5.3；
-    /// 显式 --device 须写完整 id（桥接设备形如 bridge:<name>），歧义规则与单后端一致）。
+    /// 目标设备解析：合并 adb、桥接与代理设备的在线集合统一解析。
+    /// 代理查询失败时：目标显式指向 proxy: 前缀则返回原错误，否则降级为空集
+    /// （代理服务临时不可达不阻断本地设备解析）。
     fn resolve(&self, selector: Option<&str>) -> Result<DeviceRecord, ErrorBody> {
         let adb_devices = self.backend().and_then(|b| b.devices());
-        resolve_with_bridge(
+        let mut proxy_error = None;
+        let proxy_devices = match self.proxy_devices() {
+            Ok(devices) => devices,
+            Err(e) => {
+                let target = selector.or(self.config.default_device.as_deref());
+                if target.is_some_and(|t| t.starts_with(crate::backend::PROXY_ID_PREFIX)) {
+                    return Err(e);
+                }
+                proxy_error = Some(e);
+                Vec::new()
+            }
+        };
+        let mut non_adb = self.bridge.device_records();
+        non_adb.extend(proxy_devices);
+        resolve_merged(
             selector,
             self.config.default_device.as_deref(),
             adb_devices,
-            self.bridge.device_records(),
+            non_adb,
+            proxy_error,
         )
+    }
+
+    /// 代理设备实时查询；未配置代理服务时返回空集（不视为错误）。
+    fn proxy_devices(&self) -> BResult<Vec<DeviceRecord>> {
+        if self.config.proxy.is_none() {
+            return Ok(Vec::new());
+        }
+        self.proxy_backend.devices()
     }
 
     /// 按设备记录的后端类型选择后端实例（多后端路由，design.md 决策 10）。
@@ -88,6 +117,7 @@ impl DaemonState {
         let backend: Arc<dyn Backend> = match dev.kind {
             BackendKind::Adb => self.backend()?,
             BackendKind::AppBridge => Arc::clone(&self.bridge_backend) as Arc<dyn Backend>,
+            BackendKind::Proxy => Arc::clone(&self.proxy_backend) as Arc<dyn Backend>,
         };
         debug_assert_eq!(backend.kind(), dev.kind, "后端实例与设备记录的后端类型一致");
         Ok(backend)
@@ -103,18 +133,36 @@ impl DaemonState {
     fn run(&self, command: &Command, cwd: &Path) -> Result<Value, ErrorBody> {
         match command {
             Command::Devices => {
-                let bridge_devices = self.bridge.device_records();
+                let mut non_adb = self.bridge.device_records();
+                // 代理设备实时查询；失败时降级列出其余设备并附错误说明（spec：认证失败须显式可见）
+                let proxy_error = match self.proxy_devices() {
+                    Ok(devices) => {
+                        non_adb.extend(devices);
+                        None
+                    }
+                    Err(e) => Some(e.message),
+                };
                 match self.backend().and_then(|b| b.devices()) {
                     Ok(mut devices) => {
-                        devices.extend(bridge_devices);
-                        Ok(json!({ "devices": devices }))
+                        devices.extend(non_adb);
+                        let mut out = json!({ "devices": devices });
+                        if let Some(msg) = proxy_error {
+                            out["proxy_error"] = json!(msg);
+                        }
+                        Ok(out)
                     }
-                    // adb 不可用且无桥接设备时保持原错误；有桥接设备时降级列出并附 adb 错误
-                    Err(e) if bridge_devices.is_empty() => Err(e),
-                    Err(e) => Ok(json!({
-                        "devices": bridge_devices,
-                        "adb_error": e.message,
-                    })),
+                    // adb 不可用且无其他设备时保持原错误；有其他设备时降级列出并附 adb 错误
+                    Err(e) if non_adb.is_empty() && proxy_error.is_none() => Err(e),
+                    Err(e) => {
+                        let mut out = json!({
+                            "devices": non_adb,
+                            "adb_error": e.message,
+                        });
+                        if let Some(msg) = proxy_error {
+                            out["proxy_error"] = json!(msg);
+                        }
+                        Ok(out)
+                    }
                 }
             }
             Command::Connect { target } => {
@@ -286,6 +334,29 @@ impl DaemonState {
     }
 }
 
+/// 代理错误替换决策（纯函数，便于确定性单测；FixReview IMPORTANT-3）：
+/// 代理查询失败被降级为空集后，若全部来源均无在线设备且为隐式目标
+/// （无 selector、无默认设备），返回代理原错误而非误导性的
+/// 「没有在线设备」或 adb 探测失败；显式目标保留原解析错误（NOT_FOUND/候选列表更有用）。
+fn resolve_merged(
+    selector: Option<&str>,
+    default: Option<&str>,
+    adb_devices: Result<Vec<DeviceRecord>, ErrorBody>,
+    non_adb: Vec<DeviceRecord>,
+    proxy_error: Option<ErrorBody>,
+) -> Result<DeviceRecord, ErrorBody> {
+    let any_adb_online = adb_devices
+        .as_ref()
+        .map(|ds| ds.iter().any(|d| d.state == DeviceState::Online))
+        .unwrap_or(false);
+    let nothing_online = !any_adb_online && !non_adb.iter().any(|d| d.state == DeviceState::Online);
+    let implicit = selector.is_none() && default.is_none();
+    match resolve_with_bridge(selector, default, adb_devices, non_adb) {
+        Err(e) if nothing_online && implicit => Err(proxy_error.unwrap_or(e)),
+        other => other,
+    }
+}
+
 /// 合并 adb 与桥接设备的在线集合做目标解析（纯函数，便于确定性单测）：
 /// adb 不可用不阻断桥接设备解析；两侧均无在线设备时回传 adb 原始错误（保持既有行为）。
 fn resolve_with_bridge(
@@ -424,6 +495,59 @@ mod tests {
             .expect("应包含桥接设备");
         assert_eq!(bridge["connection"], "bridge");
         assert_eq!(bridge["state"], "online");
+    }
+
+    // ---- FixReview IMPORTANT-3：代理失败 + 无在线设备时暴露代理原错误 ----
+    // （resolve_merged 纯函数测试，不依赖本机 adb/模拟器状态）
+
+    fn proxy_err() -> ErrorBody {
+        ErrorBody::proxy_error("代理服务认证失败")
+    }
+
+    #[test]
+    fn resolve_隐式目标代理失败_返回代理错误() {
+        // adb 不可用、无任何在线设备、隐式目标 → 暴露代理错误
+        let adb_err = ErrorBody::io_error("adb not found");
+        let err =
+            resolve_merged(None, None, Err(adb_err), Vec::new(), Some(proxy_err())).unwrap_err();
+        assert_eq!(
+            err.code,
+            ErrorCode::ProxyError,
+            "无任何在线设备且代理失败时应暴露代理错误，实际: {err:?}"
+        );
+    }
+
+    #[test]
+    fn resolve_显式目标代理失败_保留原解析错误() {
+        // 显式 selector：即使代理失败也保留原解析错误（NOT_FOUND/候选列表更有用）
+        let adb_err = ErrorBody::io_error("adb not found");
+        let err = resolve_merged(
+            Some("some-serial"),
+            None,
+            Err(adb_err),
+            Vec::new(),
+            Some(proxy_err()),
+        )
+        .unwrap_err();
+        assert_ne!(
+            err.code,
+            ErrorCode::ProxyError,
+            "显式目标不应被代理错误替换，实际: {err:?}"
+        );
+    }
+
+    #[test]
+    fn resolve_有在线设备时代理失败不影响解析() {
+        // adb 有在线设备：正常解析该设备，代理错误被忽略
+        let rec = resolve_merged(
+            None,
+            None,
+            Ok(vec![adb_rec("dev-online")]),
+            Vec::new(),
+            Some(proxy_err()),
+        )
+        .unwrap();
+        assert_eq!(rec.id, "dev-online");
     }
 
     // ---- 组 5：合并解析（resolve_with_bridge 纯函数） ----

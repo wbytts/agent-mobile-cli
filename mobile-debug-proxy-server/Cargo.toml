@@ -1,0 +1,28 @@
+[package]
+name = "mobile-debug-proxy-server"
+version = "0.1.0"
+edition = "2021"
+description = "公网代理中继服务：App 出站 WS 绑定 + CLI 侧 HTTP API 间接调试（design.md 决策 1/8）"
+license = "MIT"
+
+[lib]
+name = "mobile_debug_proxy_server"
+path = "src/lib.rs"
+
+[[bin]]
+name = "mobile-debug-proxy-server"
+path = "src/main.rs"
+
+[dependencies]
+axum = { version = "0.7", features = ["ws"] }
+tokio = { version = "1", features = ["full"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+parking_lot = "0.12"
+rand = "0.8"
+
+[dev-dependencies]
+tokio-tungstenite = "0.24"
+futures-util = "0.3"
+tempfile = "3"
+ureq = { version = "2", features = ["json"] }

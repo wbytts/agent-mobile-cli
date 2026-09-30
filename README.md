@@ -62,6 +62,26 @@ agent-mobile-cli daemon-status|daemon-restart|daemon-stop
 
 多设备在线时必须用 `--device <serial>` 指定目标（否则返回 `DEVICE_AMBIGUOUS` 并列出候选）。完整命令与 SOP 见 [skills/agent-mobile-cli/SKILL.md](skills/agent-mobile-cli/SKILL.md)。
 
+## 远程调试（公网代理）
+
+手机与 CLI 主机不在同一局域网时，部署 `mobile-debug-proxy-server` 作为公共中继：
+
+```bash
+# 公网主机上（或任何双方可达的主机）
+cargo build --release --manifest-path mobile-debug-proxy-server/Cargo.toml
+./mobile-debug-proxy-server/target/release/mobile-debug-proxy-server --bind 0.0.0.0:28777
+# 首启打印 owner token（64 hex，妥善保管）；数据存 ./proxy-data.json
+
+# CLI 主机：~/.agent-mobile-cli/config.json 增加
+#   "proxy": { "url": "http://<proxy-host>:28777", "token": "<owner-token>" }
+agent-mobile-cli pair --proxy          # 输出代理配对码与二维码
+# 手机 App 扫码，或手动输入 wss://<proxy-host> / http 地址连接
+agent-mobile-cli devices               # 远端设备显示为 proxy:<name>
+agent-mobile-cli snapshot --device proxy:<name>
+```
+
+说明：代理设备经统一后端路由，命令语义与本地桥接一致；`pair --proxy --reset` 重置代理配对。服务本身为明文 HTTP/WS，公网部署请在前面挂反向代理终结 TLS（如 caddy/nginx 反代到 28777），App 侧用 `wss://<域名>` 连接。协议细节见 [docs/bridge-protocol.md](docs/bridge-protocol.md)「公网中继模式」。
+
 ## 输出与退出码
 
 所有命令输出 JSON：`{"ok":true,"result":{...}}` 或 `{"ok":false,"error":{"code","message","details"}}`。退出码：0 成功、1 执行错误、2 用法错误。

@@ -346,6 +346,65 @@ pub fn pair(config: &Config, reset: bool) -> BResult<Value> {
     Ok(out)
 }
 
+/// `pair --proxy` / `pair --proxy --reset`：CLI 短进程直连代理服务签发配对码
+/// （rulings「代理配对由 CLI 直连」；不经 daemon 中转）。输出代理配对 URI 与终端二维码。
+pub fn pair_proxy(config: &Config, reset: bool) -> BResult<Value> {
+    let proxy_cfg = config.proxy.as_ref().ok_or_else(|| {
+        ErrorBody::proxy_error("未配置代理服务：请在 config.json 配置 proxy.url 与 proxy.token")
+    })?;
+    let client = crate::backend::proxy::ProxyClient::from_config(proxy_cfg);
+    if reset {
+        client.pairing_reset()?;
+    }
+    let code = client.create_pairing_code()?;
+    let (host, port, scheme) = proxy_authority(&proxy_cfg.url)?;
+    // TLS 部署时 URI 需携带 scheme，App 扫码后按 wss:// 连接（FixReview SUGGESTION）。
+    let scheme_param = scheme
+        .filter(|s| matches!(s.as_str(), "https" | "wss"))
+        .map(|_| "&scheme=wss".to_string())
+        .unwrap_or_default();
+    let uri = format!("agent-mobile://pair?host={host}&port={port}&code={code}{scheme_param}");
+    let qr = qr_unicode(&uri)?;
+    let mut out = json!({
+        "pairing_code": code,
+        "server": proxy_cfg.url,
+        "uri": uri,
+        "qr_unicode": qr,
+    });
+    if reset {
+        out["reset"] = json!(true);
+    }
+    Ok(out)
+}
+
+/// 从代理 URL 提取 host、port 与 scheme（供配对 URI；缺省端口按 http=80/https=443）。
+fn proxy_authority(url: &str) -> BResult<(String, u16, Option<String>)> {
+    let (scheme, rest) = url
+        .split_once("://")
+        .map(|(s, r)| (Some(s.to_string()), r))
+        .unwrap_or((None, url));
+    let authority = rest.split('/').next().unwrap_or(rest);
+    let (host, port) = match authority.rsplit_once(':') {
+        Some((h, p)) => {
+            let port = p
+                .parse::<u16>()
+                .map_err(|_| ErrorBody::proxy_error(format!("代理地址端口无效: {url}")))?;
+            (h.to_string(), port)
+        }
+        None => {
+            let port = match scheme.as_deref() {
+                Some("https") | Some("wss") => 443,
+                _ => 80,
+            };
+            (authority.to_string(), port)
+        }
+    };
+    if host.is_empty() {
+        return Err(ErrorBody::proxy_error(format!("代理地址缺少主机: {url}")));
+    }
+    Ok((host, port, scheme))
+}
+
 /// 配对 URI 渲染为终端 unicode block 二维码字符串（亮色块为实，适配深色终端背景）。
 fn qr_unicode(content: &str) -> BResult<String> {
     let code = qrcode::QrCode::new(content.as_bytes())
@@ -511,6 +570,125 @@ mod tests {
             serde_json::to_string(&info).expect("序列化锁"),
         )
         .expect("写入锁文件");
+    }
+
+    #[test]
+    fn proxy_authority_parses_forms() {
+        assert_eq!(
+            proxy_authority("http://proxy.example.com:28777").unwrap(),
+            (
+                "proxy.example.com".to_string(),
+                28777,
+                Some("http".to_string())
+            )
+        );
+        assert_eq!(
+            proxy_authority("https://debug.example.com").unwrap(),
+            (
+                "debug.example.com".to_string(),
+                443,
+                Some("https".to_string())
+            )
+        );
+        assert_eq!(
+            proxy_authority("http://10.0.0.2:9000/base").unwrap(),
+            ("10.0.0.2".to_string(), 9000, Some("http".to_string()))
+        );
+        assert_eq!(
+            proxy_authority("192.168.1.5:28777").unwrap(),
+            ("192.168.1.5".to_string(), 28777, None)
+        );
+        assert!(proxy_authority("http://:28777").is_err());
+        assert!(proxy_authority("http://host:notaport").is_err());
+    }
+
+    #[test]
+    fn pair_proxy_requires_config() {
+        let dir = temp_dir();
+        std::env::set_var("AGENT_MOBILE_HOME", dir.path());
+        let cfg = crate::config::Config::default();
+        let err = pair_proxy(&cfg, false).unwrap_err();
+        assert_eq!(err.code, crate::output::ErrorCode::ProxyError);
+        std::env::remove_var("AGENT_MOBILE_HOME");
+    }
+
+    /// 代理配对 URI 组成：http 部署不带 scheme 参数；code 来自服务端响应。
+    /// （https 部署的 &scheme=wss 由 proxy_authority 提取测试 + 组合逻辑覆盖。）
+    #[test]
+    fn pair_proxy_uri_http_无scheme参数() {
+        let dir = temp_dir();
+        std::env::set_var("AGENT_MOBILE_HOME", dir.path());
+        // 极简 stub：POST /pairing-codes -> {"pairing_code":"483920"}
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let (tx, rx) = std::sync::mpsc::channel::<String>();
+        std::thread::spawn(move || {
+            for stream in listener.incoming() {
+                let mut stream = match stream {
+                    Ok(s) => s,
+                    Err(_) => break,
+                };
+                // 读满请求头 + 按 Content-Length 读完整 body 再响应：
+                // 提前关闭会在接收缓冲区留未读数据触发 RST，客户端响应被丢弃
+                // （ureq 报误导性的 header EINVAL，并行负载下间歇复现）。
+                // 断言留给主线程（stub 内 panic 同样会 RST 连接）。
+                let mut buf = Vec::new();
+                let mut chunk = [0u8; 4096];
+                let _ = stream.set_read_timeout(Some(Duration::from_secs(2)));
+                let mut head_end = None;
+                loop {
+                    let n = stream.read(&mut chunk).unwrap_or(0);
+                    if n == 0 {
+                        break;
+                    }
+                    buf.extend_from_slice(&chunk[..n]);
+                    if head_end.is_none() {
+                        head_end = buf.windows(4).position(|w| w == b"\r\n\r\n").map(|p| p + 4);
+                    }
+                    if let Some(he) = head_end {
+                        let head = String::from_utf8_lossy(&buf[..he]);
+                        let len: usize = head
+                            .lines()
+                            .find_map(|l| {
+                                l.to_ascii_lowercase()
+                                    .strip_prefix("content-length:")
+                                    .and_then(|v| v.trim().parse().ok())
+                            })
+                            .unwrap_or(0);
+                        if buf.len() >= he + len {
+                            break;
+                        }
+                    }
+                }
+                let _ = tx.send(String::from_utf8_lossy(&buf).to_string());
+                let body = r#"{"pairing_code":"483920"}"#;
+                let resp = format!(
+                    "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                    body.len(),
+                    body
+                );
+                let _ = stream.write_all(resp.as_bytes());
+            }
+        });
+        let cfg = crate::config::Config {
+            proxy: Some(crate::config::ProxyConfig {
+                url: format!("http://127.0.0.1:{port}"),
+                token: "tok".to_string(),
+            }),
+            ..Default::default()
+        };
+        let out = pair_proxy(&cfg, false).unwrap();
+        let req = rx
+            .recv_timeout(Duration::from_secs(2))
+            .expect("stub 应收到请求");
+        assert!(req.starts_with("POST /pairing-codes"), "实际请求: {req}");
+        let uri = out["uri"].as_str().unwrap();
+        assert_eq!(
+            uri,
+            format!("agent-mobile://pair?host=127.0.0.1&port={port}&code=483920")
+        );
+        assert!(!uri.contains("scheme"), "http 部署不应携带 scheme: {uri}");
+        std::env::remove_var("AGENT_MOBILE_HOME");
     }
 
     /// 起真实 HTTP 服务（配对状态用临时目录），返回端口与 shutdown。

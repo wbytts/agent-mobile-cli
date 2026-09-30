@@ -17,8 +17,8 @@
     <section id="page-connect" class="page active">
       <h2>连接</h2>
       <label class="field">
-        <span>Daemon 地址</span>
-        <input id="daemon-addr" type="text" inputmode="url" placeholder="192.168.1.10:18777" autocomplete="off" />
+        <span>服务器地址（host:port 本机 daemon；ws(s):// 代理服务器）</span>
+        <input id="daemon-addr" type="text" inputmode="url" placeholder="192.168.1.10:18777 或 wss://proxy.example.com" autocomplete="off" />
       </label>
       <label class="field">
         <span>配对码</span>
@@ -28,6 +28,7 @@
       <button id="btn-connect" class="btn btn-primary" type="button">连接</button>
       <div class="status-card">
         <div class="status-row"><span>连接状态</span><span id="conn-state-text">未连接</span></div>
+        <div class="status-row"><span>目标类型</span><span id="target-type-text">—</span></div>
         <div class="status-row"><span>设备 ID</span><span id="device-id-text">—</span></div>
         <div class="status-row"><span>最近心跳</span><span id="heartbeat-text">—</span></div>
       </div>

@@ -3,6 +3,7 @@
 
 pub mod adb;
 pub mod bridge;
+pub mod proxy;
 use crate::output::ErrorBody;
 use serde::Serialize;
 use std::path::Path;
@@ -15,6 +16,21 @@ pub type BResult<T> = Result<T, ErrorBody>;
 pub enum BackendKind {
     Adb,
     AppBridge,
+    /// 公网代理通路（design.md 决策 2）：设备经 mobile-debug-proxy-server 中继接入。
+    Proxy,
+}
+
+/// 代理来源设备 id 前缀：`proxy:<device_name>`。
+pub const PROXY_ID_PREFIX: &str = "proxy:";
+
+/// 由代理侧设备名构造 CLI 设备 id。
+pub fn proxy_device_id(name: &str) -> String {
+    format!("{PROXY_ID_PREFIX}{name}")
+}
+
+/// 解析代理来源设备 id，非代理 id 返回 None。
+pub fn proxy_device_name(id: &str) -> Option<&str> {
+    id.strip_prefix(PROXY_ID_PREFIX)
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -31,6 +47,8 @@ pub enum ConnectionKind {
     Usb,
     Network,
     Bridge,
+    /// 经公网代理服务中继的连接。
+    Proxy,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -174,5 +192,35 @@ mod tests {
         let devices = vec![rec("a:5555"), rec("b:5555")];
         let got = resolve_target(None, Some("b:5555"), &devices).unwrap();
         assert_eq!(got.id, "b:5555");
+    }
+
+    #[test]
+    fn proxy_kind_serializes_kebab() {
+        let v = serde_json::to_value(BackendKind::Proxy).unwrap();
+        assert_eq!(v, serde_json::json!("proxy"));
+    }
+
+    #[test]
+    fn proxy_device_id_roundtrip() {
+        let id = proxy_device_id("MuMu");
+        assert_eq!(id, "proxy:MuMu");
+        assert_eq!(proxy_device_name(&id), Some("MuMu"));
+        assert_eq!(proxy_device_name("bridge:MuMu"), None);
+        assert_eq!(proxy_device_name("127.0.0.1:5555"), None);
+    }
+
+    #[test]
+    fn resolve_proxy_device_participates_ambiguity() {
+        let mut p = rec("proxy:MuMu");
+        p.kind = BackendKind::Proxy;
+        p.connection = ConnectionKind::Proxy;
+        let devices = vec![rec("a:5555"), p];
+        let err = resolve_target(None, None, &devices).unwrap_err();
+        assert_eq!(err.code, crate::output::ErrorCode::DeviceAmbiguous);
+        let details = err.details.unwrap();
+        assert!(details["candidates"]
+            .as_str()
+            .unwrap()
+            .contains("proxy:MuMu"));
     }
 }

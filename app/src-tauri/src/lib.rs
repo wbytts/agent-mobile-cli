@@ -129,6 +129,7 @@ fn bridge_plugin() -> tauri::plugin::TauriPlugin<tauri::Wry> {
 // ---------- 组 4：连接开关 / 状态查询 / 配对扫码 ----------
 
 /// 发起桥接连接（WS 客户端 + 自动重连）；配对码可空（已有 token 时免配对）。
+/// `url` 为完整 WS URL（代理服务器 ws(s):// 形式）；None 时按 host/port 走 legacy daemon 路径。
 #[tauri::command]
 fn bridge_connect(
     app: AppHandle,
@@ -136,8 +137,9 @@ fn bridge_connect(
     host: String,
     port: u16,
     pairing_code: Option<String>,
+    url: Option<String>,
 ) -> Result<(), String> {
-    ctrl.connect(app, host, port, pairing_code)
+    ctrl.connect(app, host, port, pairing_code, url)
 }
 
 /// 断开桥接连接并停止前台服务。
@@ -188,7 +190,7 @@ fn bridge_auto_connect(app: AppHandle, ctrl: State<'_, BridgeController>) -> boo
             ) {
                 return false;
             }
-            let _ = ctrl.connect(app, host, port, None);
+            let _ = ctrl.connect(app, host, port, None, None);
             true
         }
         None => false,

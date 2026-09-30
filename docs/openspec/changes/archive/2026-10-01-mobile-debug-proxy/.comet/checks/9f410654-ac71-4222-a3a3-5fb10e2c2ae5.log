@@ -1,0 +1,46 @@
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.36s
+     Running unittests src/lib.rs (app/src-tauri/target/debug/deps/agent_mobile_bridge_lib-45d85bf5e693c847)
+
+running 39 tests
+test bridge_client::tests::backoff_doubles_and_caps_at_30s ... ok
+test bridge_client::tests::hello_uses_pairing_code_when_no_token ... ok
+test bridge_client::tests::address_persistence_roundtrip ... ok
+test bridge_client::tests::auto_connect_triggers_only_with_saved_address ... ok
+test bridge_client::tests::hello_prefers_stored_token_over_pairing_code ... ok
+test bridge_client::tests::hello_ack_ok_stores_token_and_enters_connected ... ok
+test bridge_client::tests::hello_ack_reject_enters_pairing_state_with_reason ... ok
+test bridge_client::tests::hello_ack_reject_clears_stored_token_and_falls_back_to_code ... ok
+test bridge_client::tests::command_unknown_method_returns_error_result ... ok
+test bridge_client::tests::command_plugin_error_becomes_error_result ... ok
+test bridge_client::tests::command_tap_dispatches_to_ops_and_returns_ok_result ... ok
+test bridge_client::tests::command_all_methods_dispatch ... ok
+test bridge_client::tests::ws_url_defaults_to_legacy_daemon_path ... ok
+test bridge_client::tests::ws_url_uses_full_url_when_provided ... ok
+test bridge_proto::tests::all_capabilities_parse ... ok
+test bridge_proto::tests::daemon_messages_roundtrip_via_deserialize ... ok
+test bridge_proto::tests::daemon_messages_serialize_with_type_tag ... ok
+test bridge_client::tests::parse_pair_uri_valid ... ok
+test bridge_client::tests::parse_pair_uri_with_wss_scheme ... ok
+test bridge_proto::tests::heartbeat_and_result_parse ... ok
+test bridge_proto::tests::hello_with_pairing_code_roundtrip ... ok
+test bridge_proto::tests::hello_with_token_path ... ok
+test bridge_proto::tests::unknown_type_rejected ... ok
+test bridge_client::tests::parse_pair_uri_rejects_bad_input ... ok
+test sandbox::tests::screenshot_result_available_as_object ... ok
+test bridge_client::tests::script_success_returns_value_result ... ok
+test bridge_client::tests::script_exception_becomes_error_result ... ok
+test sandbox::tests::input_key_launch_forward_arguments ... ok
+test sandbox::tests::script_exception_propagates ... ok
+test sandbox::tests::normal_script_unaffected_by_limits ... ok
+test sandbox::tests::sandbox_has_no_host_modules ... ok
+test sandbox::tests::bridge_failure_becomes_script_error ... ok
+test sandbox::tests::all_eight_mobile_functions_exist ... ok
+test sandbox::tests::swipe_reaches_bridge_with_all_args ... ok
+test sandbox::tests::tap_reaches_bridge_with_coords ... ok
+test sandbox::tests::memory_hog_interrupted_by_limit ... ok
+test sandbox::tests::ui_tree_result_available_as_object ... ok
+test sandbox::tests::script_return_value_roundtrip ... ok
+test sandbox::tests::infinite_loop_interrupted_by_timeout ... ok
+
+test result: ok. 39 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.50s
+

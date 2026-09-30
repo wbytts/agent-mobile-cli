@@ -13,6 +13,10 @@ pub enum ErrorCode {
     IoError,
     /// 命令用法/参数语义错误（对应退出码 2）
     Usage,
+    /// 公网代理服务认证失败（owner token 无效/缺失）
+    ProxyAuth,
+    /// 公网代理服务通用错误（未配置、不可达、非预期响应）
+    ProxyError,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -68,6 +72,12 @@ impl ErrorBody {
 
     pub fn io_error(message: impl Into<String>) -> Self {
         Self::new(ErrorCode::IoError, message, None)
+    }
+    pub fn proxy_auth(message: impl Into<String>) -> Self {
+        Self::new(ErrorCode::ProxyAuth, message, None)
+    }
+    pub fn proxy_error(message: impl Into<String>) -> Self {
+        Self::new(ErrorCode::ProxyError, message, None)
     }
     pub fn usage(message: impl Into<String>) -> Self {
         Self::new(ErrorCode::Usage, message, None)

@@ -74,25 +74,55 @@
       connBadge.className = "badge badge-disconnected";
       connStateText.textContent = "未连接";
       deviceIdText.textContent = "—";
+      targetTypeText.textContent = "—";
       heartbeatText.textContent = "—";
     }
     btnConnect.textContent = busy ? "断开" : "连接";
   }
 
-  // 「host:port」或裸 host（默认端口 18777）
-  function parseAddr() {
-    var text = addrInput.value.trim();
-    if (!text) {
-      return null;
-    }
+  var targetTypeText = document.getElementById("target-type-text");
+
+  function splitHostPort(text, defaultPort) {
     var idx = text.lastIndexOf(":");
     if (idx > 0) {
       var port = parseInt(text.slice(idx + 1), 10);
       if (port > 0 && port <= 65535) {
         return { host: text.slice(0, idx), port: port };
       }
+      return null;
     }
-    return { host: text, port: 18777 };
+    return { host: text, port: defaultPort };
+  }
+
+  // 三种地址形式（决策 12）：
+  //   host:port            → 本机 daemon（legacy ws://host:port/ws）
+  //   ws(s)://host:port    → 代理服务器（默认路径 /ws/device）
+  //   ws(s)://host:port/p  → 代理服务器（显式路径，如反代挂载点）
+  function parseAddr() {
+    var text = addrInput.value.trim();
+    if (!text) {
+      return null;
+    }
+    var m = text.match(/^(wss?):\/\/([^/]+?)(\/.*)?$/i);
+    if (m) {
+      var scheme = m[1].toLowerCase();
+      var hp = splitHostPort(m[2], scheme === "wss" ? 443 : 80);
+      if (!hp || !hp.host) {
+        return null;
+      }
+      var path = m[3] || "/ws/device";
+      return {
+        host: hp.host,
+        port: hp.port,
+        url: scheme + "://" + m[2] + path,
+        proxy: true,
+      };
+    }
+    var legacy = splitHostPort(text, 18777);
+    if (!legacy || !legacy.host) {
+      return null;
+    }
+    return { host: legacy.host, port: legacy.port, url: null, proxy: false };
   }
 
   function startConnect() {
@@ -102,15 +132,17 @@
     }
     var addr = parseAddr();
     if (!addr) {
-      appendLog("err", "未填写 daemon 地址");
+      appendLog("err", "服务器地址无效");
       addrInput.focus();
       return;
     }
+    targetTypeText.textContent = addr.proxy ? "代理服务器" : "本机 daemon";
     var code = codeInput.value.trim();
     invoke("bridge_connect", {
       host: addr.host,
       port: addr.port,
       pairingCode: code ? code : null,
+      url: addr.url,
     }).catch(function (err) {
       appendLog("err", "发起连接失败：" + err);
     });
@@ -139,9 +171,12 @@
         return invoke("bridge_parse_pair_uri", { uri: text });
       })
       .then(function (info) {
-        addrInput.value = info.host + ":" + info.port;
+        // scheme 存在（wss://代理反代）时按完整 URL 填入 → 代理连接；否则 legacy host:port。
+        addrInput.value = info.scheme
+          ? info.scheme + "://" + info.host + ":" + info.port
+          : info.host + ":" + info.port;
         codeInput.value = info.code;
-        appendLog("ok", "扫码成功：" + info.host + ":" + info.port);
+        appendLog("ok", "扫码成功：" + addrInput.value);
         startConnect();
       })
       .catch(function (err) {

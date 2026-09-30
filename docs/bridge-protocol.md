@@ -4,6 +4,10 @@ CLI daemon 与设备端调试 App 之间的 WebSocket 桥接协议。消息类�
 `src/bridge_proto.rs`（App Rust core 以 path 引用同一文件，design.md 决策 11）；
 本文档与该文件逐字段一致，修改协议时必须同步更新。
 
+**公网中继**：mobile-debug-proxy-server（仓库根目录独立 crate）作为公网中继复用本协议，
+App 侧不感知对端是 daemon 还是中继服务（mobile-debug-proxy design.md 决策 1/3，见文末
+「公网中继模式」章节）。
+
 - 传输：WebSocket 文本帧（JSON，UTF-8）；daemon 监听 `0.0.0.0:<bridge_port>`（默认 18777，
   LAN 可达以支持真机直连/扫码配对，design.md 决策 8；暴露面由一次性配对码 + token 认证兜底）。
   HTTP 管理端点（含 `/pair-info` 配对码）仍只绑定 `127.0.0.1:18775`。
@@ -200,3 +204,38 @@ App                daemon
  |<-- result_ack ----|
  |--- 断开 --------->|  标记离线（记录保留，重连注册恢复在线）
 ```
+
+## 公网中继模式（mobile-debug-proxy）
+
+`mobile-debug-proxy-server` 把本协议延伸到公网：App 出站连接中继服务，CLI 经中继的
+HTTP API 间接调试，解决 App 与 CLI 主机不在同一局域网的场景。帧定义不变（单一来源
+仍是 `src/bridge_proto.rs`），差异仅在角色与入口：
+
+- **设备侧连接**：App 连接中继的 `WS /ws/device`（或 `/ws` 别名，与 daemon 路径一致），
+  hello/heartbeat/result 各帧字段契约不变；配对码由中继服务签发与校验，App 不感知。
+- **请求标识**：中继场景 command/script 的 `id` 由中继服务按全局序号分配（`cmd-<n>`），
+  在同一设备连接上唯一；result 按该 id 端到端关联回传给 CLI 调用方。
+- **CLI 侧 HTTP API**（除 `/healthz` 外均需 `Authorization: Bearer <owner-token>`）：
+
+| 端点 | 说明 |
+| ---- | ---- |
+| `GET /healthz` | 健康检查（无认证） |
+| `GET /devices` | owner 名下设备枚举 `{devices:[{name,online,capabilities,last_seen}]}`（last_seen 为 RFC3339） |
+| `POST /devices/:name/commands` | body `{method,params}`，中继 command 并同步等待 result |
+| `POST /devices/:name/scripts` | body `{source}`，中继 script 并同步等待 result |
+| `POST /pairing-codes` | 签发一次性配对码，返回 `{pairing_code}` |
+| `POST /pairing-reset` | 重置配对码、吊销 owner 全部设备 token 并断开其已连接设备 |
+
+- **响应契约**：中继完成（含设备执行失败）统一 200 + `{"ok", "result"|"error"}`；
+  设备不存在/离线 404 `{"error"}`；等待超时 504 `{"error"}`；认证失败 401 `{"error"}`；
+  跨 owner 访问按 404 处理（不泄露设备存在性）。
+- **owner 隔离**：设备注册表与配对码按 owner token 隔离；owner token 首启自动生成
+  （64 hex）或由 `--owner-token` 注入；配对码在全服务范围唯一（跨 owner 无碰撞）。
+- **reset 原子性**：`pairing-reset` 与 WS hello 的认证+注册互斥（同一把锁），
+  在途 hello 要么先完成注册（随后被断开），要么在 reset 后认证失败——
+  不存在「reset 返回后仍有设备以已吊销 token 在线」的窗口。
+- **设备名约束**：1-64 字符，不得含 `/ ? # %` 或控制字符（设备名进入 HTTP 路径段，
+  CLI 侧对空格/中文等做百分编码后调用）。
+- **部署**：服务监听明文 HTTP/WS（默认 `0.0.0.0:28777`），公网部署由反向代理终结 TLS
+  （wss/https）；App 地址输入 `wss://host` 形式即经反代连接。代理配对 URI 在 TLS
+  部署时携带 `&scheme=wss`，App 扫码后按 wss:// 连接。

@@ -143,6 +143,17 @@ echo 'return mobile.uiTree().xml.length' | agent-mobile-cli script - --device br
 
 桥接设备不支持的能力（shell/logcat/stop）会返回结构化 `NOT_SUPPORTED` 错误。
 
+### 4.5（可选）公网代理远程调试
+
+手机与 CLI 主机不在同一局域网时（蜂窝网络、云端 Agent），部署仓库根目录的 `mobile-debug-proxy-server`：
+
+1. 公网主机构建并启动：`cargo build --release --manifest-path mobile-debug-proxy-server/Cargo.toml`，运行 `--bind 0.0.0.0:28777`（记录首启打印的 owner token）；生产环境前置反向代理终结 TLS。
+2. CLI 主机 `~/.agent-mobile-cli/config.json` 增加 `"proxy": { "url": "http://<proxy-host>:28777", "token": "<owner-token>" }`。
+3. `agent-mobile-cli pair --proxy` 输出代理配对码与二维码；手机 App 扫码连接，或手动输入 `wss://<域名>`（经反代）/`ws://<host:port>`。
+4. 验证：`agent-mobile-cli devices` 出现 `proxy:<设备名>`；`agent-mobile-cli snapshot --device proxy:<名字>` 正常返回。
+
+代理设备命令语义与本地桥接一致；不支持的 shell/logcat/stop 同样返回 `NOT_SUPPORTED`。
+
 ## 5. 使用入口
 
 完整命令 SOP 见安装后的：

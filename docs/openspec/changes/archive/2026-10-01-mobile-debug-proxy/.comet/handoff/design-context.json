@@ -1,0 +1,19 @@
+{
+  "change": "mobile-debug-proxy",
+  "phase": "design",
+  "mode": "compact",
+  "canonical_spec": "openspec",
+  "task_hash_policy": "task-content-v1",
+  "generated_by": "comet-handoff.sh",
+  "context_hash": "c56f6573304c93f4a08e99d0ca39ef44097fb5db04ec7d1867bb1639e97ace8e",
+  "files": [
+    { "path": "docs/openspec/changes/mobile-debug-proxy/proposal.md", "sha256": "31837c88a6e40799d249a8ec70b86dd49dd148cb05be3f770495d96bbf499c1f" },
+    { "path": "docs/openspec/changes/mobile-debug-proxy/design.md", "sha256": "651619a5cddbf0629a57af3275a55cf7c4c6e3eb65b6201eddb24cd6aa276a50" },
+    { "path": "docs/openspec/changes/mobile-debug-proxy/tasks.md", "sha256": "9e5b2f48a569c3051a83b237bf023f62da1225f491e957ee37e9c58386cced7a" },
+    { "path": "docs/openspec/changes/mobile-debug-proxy/.openspec.yaml", "sha256": "5edc88a042fdda2550686e54689bdd6779b13445bcaf782a1af9426634b9b4fb" },
+    { "path": "docs/openspec/changes/mobile-debug-proxy/specs/agent-app/spec.md", "sha256": "22b799d4bf9fbcec83696e37b3877cd575fb9dbae446a63519d78dced032ad84" },
+    { "path": "docs/openspec/changes/mobile-debug-proxy/specs/bridge-protocol/spec.md", "sha256": "23de2dd062d3c0cc45ec58bc2cae1f96bce53fb8715c02e3dda0ff6c22b97d0c" },
+    { "path": "docs/openspec/changes/mobile-debug-proxy/specs/debug-proxy-server/spec.md", "sha256": "2621ccc260a9a6e7bc19f30225e180d09e3cb3f860614761fd23be93ad051960" },
+    { "path": "docs/openspec/changes/mobile-debug-proxy/specs/device-backends/spec.md", "sha256": "98a7ae0aec66d34d2380314a4a57713a19f357f5152dde25f13b645f43ff99fe" }
+  ]
+}

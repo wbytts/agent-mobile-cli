@@ -4,3 +4,7 @@
 #[allow(dead_code)] // 测试目标只引用子集（executor/http 等不在本树内）
 #[path = "../../src/daemon/registry.rs"]
 pub mod registry;
+
+#[allow(dead_code)] // exec.rs 树需要 daemon::pair::Pairing 类型
+#[path = "../../src/daemon/pair.rs"]
+pub mod pair;

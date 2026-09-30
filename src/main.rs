@@ -39,14 +39,22 @@ fn run(command: cli::Command) -> Output {
             Ok(()) => Output::success(serde_json::json!({ "stopped": true })),
             Err(e) => err_output(e),
         },
-        Pair { reset } => {
-            // 配对信息管理命令：确保 daemon 后读本机管理端点（design.md 决策 8）
-            if let Err(e) = daemon::ensure_daemon(&cfg) {
-                return err_output(e);
-            }
-            match daemon::pair(&cfg, reset) {
-                Ok(info) => Output::success(info),
-                Err(e) => err_output(e),
+        Pair { reset, proxy } => {
+            if proxy {
+                // 代理配对：CLI 直连代理服务，无需 daemon（design.md 决策 5，rulings 调整）
+                match daemon::pair_proxy(&cfg, reset) {
+                    Ok(info) => Output::success(info),
+                    Err(e) => err_output(e),
+                }
+            } else {
+                // 配对信息管理命令：确保 daemon 后读本机管理端点（design.md 决策 8）
+                if let Err(e) = daemon::ensure_daemon(&cfg) {
+                    return err_output(e);
+                }
+                match daemon::pair(&cfg, reset) {
+                    Ok(info) => Output::success(info),
+                    Err(e) => err_output(e),
+                }
             }
         }
         DaemonRestart => {

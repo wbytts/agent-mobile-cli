@@ -5,6 +5,13 @@ use std::path::PathBuf;
 pub const DEFAULT_HTTP_PORT: u16 = 18775;
 pub const DEFAULT_BRIDGE_PORT: u16 = 18777;
 
+/// 公网代理服务配置（design.md 决策 2/4）：daemon uplink 经该地址与凭证接入代理。
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct ProxyConfig {
+    pub url: String,
+    pub token: String,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(default)]
 pub struct Config {
@@ -12,6 +19,7 @@ pub struct Config {
     pub bridge_port: u16,
     pub adb_path: Option<PathBuf>,
     pub default_device: Option<String>,
+    pub proxy: Option<ProxyConfig>,
 }
 
 impl Default for Config {
@@ -21,6 +29,7 @@ impl Default for Config {
             bridge_port: DEFAULT_BRIDGE_PORT,
             adb_path: None,
             default_device: None,
+            proxy: None,
         }
     }
 }
@@ -116,6 +125,32 @@ mod tests {
         assert_eq!(loaded.http_port, 19000);
         assert_eq!(loaded.default_device.as_deref(), Some("127.0.0.1:5555"));
         std::env::remove_var("AGENT_MOBILE_HOME");
+    }
+
+    #[test]
+    fn proxy_config_roundtrip() {
+        let _g = ENV_LOCK.lock();
+        let tmp = tempfile::tempdir().unwrap();
+        std::env::set_var("AGENT_MOBILE_HOME", tmp.path());
+        let cfg = Config {
+            proxy: Some(ProxyConfig {
+                url: "http://proxy.example.com:28777".into(),
+                token: "deadbeef".repeat(8),
+            }),
+            ..Config::default()
+        };
+        cfg.save().unwrap();
+        let loaded = Config::load_or_create().unwrap();
+        let proxy = loaded.proxy.expect("proxy 配置应保留");
+        assert_eq!(proxy.url, "http://proxy.example.com:28777");
+        assert_eq!(proxy.token, "deadbeef".repeat(8));
+        std::env::remove_var("AGENT_MOBILE_HOME");
+    }
+
+    #[test]
+    fn proxy_defaults_to_none() {
+        let cfg = Config::default();
+        assert!(cfg.proxy.is_none());
     }
 
     #[test]

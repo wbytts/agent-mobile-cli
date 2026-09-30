@@ -117,6 +117,9 @@ pub enum Command {
         /// 重新生成配对码并使全部已签发 token 失效
         #[arg(long)]
         reset: bool,
+        /// 操作公网代理服务的配对（签发代理配对码；与 --reset 组合为重置代理配对）
+        #[arg(long)]
+        proxy: bool,
     },
     /// 重启 daemon
     DaemonRestart,
@@ -258,9 +261,37 @@ mod tests {
     #[test]
     fn parses_pair() {
         let cli = Cli::try_parse_from(["agent-mobile-cli", "pair"]).unwrap();
-        assert_eq!(cli.command, Command::Pair { reset: false });
+        assert_eq!(
+            cli.command,
+            Command::Pair {
+                reset: false,
+                proxy: false
+            }
+        );
         let cli = Cli::try_parse_from(["agent-mobile-cli", "pair", "--reset"]).unwrap();
-        assert_eq!(cli.command, Command::Pair { reset: true });
+        assert_eq!(
+            cli.command,
+            Command::Pair {
+                reset: true,
+                proxy: false
+            }
+        );
+        let cli = Cli::try_parse_from(["agent-mobile-cli", "pair", "--proxy"]).unwrap();
+        assert_eq!(
+            cli.command,
+            Command::Pair {
+                reset: false,
+                proxy: true
+            }
+        );
+        let cli = Cli::try_parse_from(["agent-mobile-cli", "pair", "--proxy", "--reset"]).unwrap();
+        assert_eq!(
+            cli.command,
+            Command::Pair {
+                reset: true,
+                proxy: true
+            }
+        );
     }
     #[test]
     fn parses_script() {
